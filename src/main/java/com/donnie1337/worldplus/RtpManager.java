@@ -417,47 +417,59 @@ public final class RtpManager implements Listener {
             return;
         }
 
-        try {
-            Object craftWorld = world;
-            java.lang.reflect.Method getHandle = craftWorld.getClass().getMethod("getHandle");
-            Object serverLevel = getHandle.invoke(craftWorld);
-
-            java.lang.reflect.Method getChunkSource = serverLevel.getClass().getMethod("getChunkSource");
-            Object chunkSource = getChunkSource.invoke(serverLevel);
-
-            Class<?> chunkStatusClass;
+        // A chamada ao pipeline NMS também não pode ficar no thread principal.
+        // Em mundos ainda não explorados, getChunkFuture pode esperar por trabalho
+        // de chunk antes mesmo de devolver a Future. BetterRTP evita esse bloqueio
+        // através de uma camada de carregamento assíncrono; aqui fazemos a mesma
+        // separação sem depender de Paper.
+        Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
             try {
-                chunkStatusClass = Class.forName("net.minecraft.world.level.chunk.status.ChunkStatus");
-            } catch (ClassNotFoundException ignored) {
-                chunkStatusClass = Class.forName("net.minecraft.world.level.chunk.ChunkStatus");
-            }
+                Object craftWorld = world;
+                java.lang.reflect.Method getHandle = craftWorld.getClass().getMethod("getHandle");
+                Object serverLevel = getHandle.invoke(craftWorld);
 
-            Object fullStatus = chunkStatusClass.getField("FULL").get(null);
-            java.lang.reflect.Method getChunkFuture = chunkSource.getClass().getMethod(
-                    "getChunkFuture", int.class, int.class, chunkStatusClass, boolean.class);
+                java.lang.reflect.Method getChunkSource = serverLevel.getClass().getMethod("getChunkSource");
+                Object chunkSource = getChunkSource.invoke(serverLevel);
 
-            Object futureObject = getChunkFuture.invoke(chunkSource, chunkX, chunkZ, fullStatus, true);
-            if (!(futureObject instanceof java.util.concurrent.CompletableFuture<?> future)) {
-                throw new IllegalStateException("O pipeline de chunks não retornou CompletableFuture.");
-            }
+                Class<?> chunkStatusClass;
+                try {
+                    chunkStatusClass = Class.forName("net.minecraft.world.level.chunk.status.ChunkStatus");
+                } catch (ClassNotFoundException ignored) {
+                    chunkStatusClass = Class.forName("net.minecraft.world.level.chunk.ChunkStatus");
+                }
 
-            future.whenComplete((result, throwable) -> Bukkit.getScheduler().runTask(plugin, () -> {
-                if (throwable != null) {
-                    plugin.getLogger().warning("Falha assíncrona ao preparar chunk "
+                Object fullStatus = chunkStatusClass.getField("FULL").get(null);
+                java.lang.reflect.Method getChunkFuture = chunkSource.getClass().getMethod(
+                        "getChunkFuture", int.class, int.class, chunkStatusClass, boolean.class);
+
+                Object futureObject = getChunkFuture.invoke(
+                        chunkSource, chunkX, chunkZ, fullStatus, true);
+
+                if (!(futureObject instanceof java.util.concurrent.CompletableFuture<?> future)) {
+                    throw new IllegalStateException("O pipeline de chunks não retornou CompletableFuture.");
+                }
+
+                future.whenComplete((result, throwable) ->
+                        Bukkit.getScheduler().runTask(plugin, () -> {
+                            if (throwable != null) {
+                                plugin.getLogger().warning("Falha assíncrona ao preparar chunk "
+                                        + chunkX + "," + chunkZ + " em " + world.getName()
+                                        + ": " + throwable.getMessage());
+                                callback.accept(false);
+                                return;
+                            }
+
+                            callback.accept(world.isChunkGenerated(chunkX, chunkZ));
+                        }));
+            } catch (Throwable throwable) {
+                Bukkit.getScheduler().runTask(plugin, () -> {
+                    plugin.getLogger().warning("Não foi possível iniciar o carregamento assíncrono da chunk "
                             + chunkX + "," + chunkZ + " em " + world.getName()
                             + ": " + throwable.getMessage());
                     callback.accept(false);
-                    return;
-                }
-
-                callback.accept(world.isChunkGenerated(chunkX, chunkZ));
-            }));
-        } catch (Throwable throwable) {
-            plugin.getLogger().warning("Não foi possível iniciar o carregamento assíncrono da chunk "
-                    + chunkX + "," + chunkZ + " em " + world.getName()
-                    + ": " + throwable.getMessage());
-            callback.accept(false);
-        }
+                });
+            }
+        });
     }
 
     private void retryCandidate(Player player, World world, WorldSettings settings, int attempts, int attempt,
@@ -472,47 +484,45 @@ public final class RtpManager implements Listener {
         org.bukkit.Chunk chunk = world.getChunkAt(chunkX, chunkZ, false);
         org.bukkit.ChunkSnapshot snapshot = chunk.getChunkSnapshot(true, false, false);
 
+        // Não varremos a chunk inteira. getHighestBlockYAt já fornece o topo
+        // não-ar da coluna; testar dezenas de colunas e somente os três blocos
+        // necessários mantém a validação barata no thread principal.
         int start = ThreadLocalRandom.current().nextInt(256);
         int worldMaxY = world.getMaxHeight();
         int scanMinY = Math.max(world.getMinHeight(), minY);
         int scanMaxY = Math.min(worldMaxY - 3, maxY);
 
-        // Inspirado no RandomTP: a coluna sorteada é procurada de cima para baixo.
-        // Diferente da implementação anterior, não dependemos de uma lista pequena
-        // de blocos de superfície. Stone/deepslate e outros blocos naturais sólidos
-        // também podem ser terreno válido.
-        for (int offset = 0; offset < 256; offset++) {
+        int columnsToCheck = 32;
+        for (int offset = 0; offset < columnsToCheck; offset++) {
             int index = (start + offset) & 255;
             int localX = index & 15;
             int localZ = index >> 4;
 
             int highest = snapshot.getHighestBlockYAt(localX, localZ);
-            int y = Math.min(highest, scanMaxY);
+            if (highest < scanMinY || highest > scanMaxY) continue;
 
-            for (; y >= scanMinY; y--) {
-                Material floor = snapshot.getBlockType(localX, y, localZ);
-                Material feet = snapshot.getBlockType(localX, y + 1, localZ);
-                Material head = snapshot.getBlockType(localX, y + 2, localZ);
+            Material floor = snapshot.getBlockType(localX, highest, localZ);
+            Material feet = snapshot.getBlockType(localX, highest + 1, localZ);
+            Material head = snapshot.getBlockType(localX, highest + 2, localZ);
 
-                if (!isValidSurface(world.getEnvironment(), floor)) continue;
-                if (!isSafeMaterials(floor, feet, head)) continue;
+            if (!isValidSurface(world.getEnvironment(), floor)) continue;
+            if (!isSafeMaterials(floor, feet, head)) continue;
 
-                if (world.getEnvironment() == World.Environment.NETHER) {
-                    boolean open = true;
-                    for (int checkY = y + 1; checkY <= y + 8 && checkY < worldMaxY; checkY++) {
-                        if (!isAirLike(snapshot.getBlockType(localX, checkY, localZ))) {
-                            open = false;
-                            break;
-                        }
+            if (world.getEnvironment() == World.Environment.NETHER) {
+                boolean open = true;
+                for (int checkY = highest + 1; checkY <= highest + 8 && checkY < worldMaxY; checkY++) {
+                    if (!isAirLike(snapshot.getBlockType(localX, checkY, localZ))) {
+                        open = false;
+                        break;
                     }
-                    if (!open) continue;
                 }
-
-                return new Location(world,
-                        chunkX * 16 + localX + 0.5D,
-                        y + 1.0D,
-                        chunkZ * 16 + localZ + 0.5D);
+                if (!open) continue;
             }
+
+            return new Location(world,
+                    chunkX * 16 + localX + 0.5D,
+                    highest + 1.0D,
+                    chunkZ * 16 + localZ + 0.5D);
         }
 
         return null;
