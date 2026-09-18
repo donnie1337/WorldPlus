@@ -48,7 +48,7 @@ public final class TitleManager implements Listener {
         sendTitle(player,
                 plugin.getConfig().getString("titles.rtp-preparando.titulo", "&b&lᴛᴇʟᴇᴘᴏʀᴛᴇ"),
                 plugin.getConfig().getString("titles.rtp-preparando.subtitulo", "&7Preparando seu destino..."),
-                fadeIn, Math.max(1, stayTicks), fadeOut);
+                fadeIn, Integer.MAX_VALUE, fadeOut);
     }
 
     public void showBiome(Player player, Location location) {
@@ -65,7 +65,9 @@ public final class TitleManager implements Listener {
     }
 
     public void endRtpTitle(Player player) {
-        if (player != null) rtpTitleActive.remove(player.getUniqueId());
+        if (player == null) return;
+        rtpTitleActive.remove(player.getUniqueId());
+        player.resetTitle();
     }
 
     public void showBiomeAfterRtp(Player player, Location location) {
