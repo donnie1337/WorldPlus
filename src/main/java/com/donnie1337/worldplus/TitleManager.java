@@ -48,7 +48,7 @@ public final class TitleManager implements Listener {
         sendTitle(player,
                 plugin.getConfig().getString("titles.rtp-preparando.titulo", "&b&lᴛᴇʟᴇᴘᴏʀᴛᴇ"),
                 plugin.getConfig().getString("titles.rtp-preparando.subtitulo", "&7Preparando seu destino..."),
-                fadeIn, Integer.MAX_VALUE, fadeOut);
+                fadeIn, 72000, fadeOut);
     }
 
     public void showBiome(Player player, Location location) {
