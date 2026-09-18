@@ -68,28 +68,21 @@ public final class RtpManager implements Listener {
             return;
         }
 
-        int delay = Math.max(0, plugin.getConfig().getInt("rtp.geral.atraso-segundos", 3));
         pendingWorlds.put(uuid, settings.id());
 
+        // O GUI já foi fechado pelo evento de clique. Agora o title aparece
+        // imediatamente e a preparação do RTP começa 0,5s depois.
         if (plugin.getTitleManager() != null) {
-            int stayTicks = delay > 0 && !player.hasPermission("worldplus.rtp.bypass.delay")
-                    ? delay * 20
-                    : plugin.getConfig().getInt("titles.rtp-preparando.duracao", 40);
-            plugin.getTitleManager().showRtpLoading(player, Math.max(1, stayTicks));
+            plugin.getTitleManager().showRtpLoading(player, 10);
         }
 
-        if (delay > 0 && !player.hasPermission("worldplus.rtp.bypass.delay")) {
-            delays.put(uuid, System.currentTimeMillis() + delay * 1000L);
+        delays.put(uuid, System.currentTimeMillis() + 500L);
 
-            Bukkit.getScheduler().runTaskLater(plugin, () -> {
-                if (!player.isOnline() || !pendingWorlds.containsKey(uuid)) return;
-                delays.remove(uuid);
-                findAndTeleport(player, settings);
-            }, delay * 20L);
-            return;
-        }
-
-        findAndTeleport(player, settings);
+        Bukkit.getScheduler().runTaskLater(plugin, () -> {
+            if (!player.isOnline() || !pendingWorlds.containsKey(uuid)) return;
+            delays.remove(uuid);
+            findAndTeleport(player, settings);
+        }, 10L);
     }
 
     private void findAndTeleport(Player player, WorldSettings settings) {
