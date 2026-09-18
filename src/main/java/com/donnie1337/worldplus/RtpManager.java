@@ -194,47 +194,40 @@ public final class RtpManager implements Listener {
 
         // Spigot 26.2 não expõe getChunkAtAsync na API Bukkit.
         // A geração/carregamento é solicitado pela API síncrona do mundo.
-        org.bukkit.Chunk chunk;
         try {
-            chunk = world.getChunkAt(chunkX, chunkZ, true);
-                org.bukkit.ChunkSnapshot snapshot = chunk.getChunkSnapshot(true, false, false);
-                int localX = blockX & 15;
-                int localZ = blockZ & 15;
-                int highest = snapshot.getHighestBlockYAt(localX, localZ);
+            org.bukkit.Chunk chunk = world.getChunkAt(chunkX, chunkZ, true);
+            org.bukkit.ChunkSnapshot snapshot = chunk.getChunkSnapshot(true, false, false);
+            int localX = blockX & 15;
+            int localZ = blockZ & 15;
+            int highest = snapshot.getHighestBlockYAt(localX, localZ);
 
-                if (highest < minY || highest > maxY) {
-                    findCandidate(player, world, settings, attempts, attempt + 1, minRadius, maxRadius,
-                            useBorder, centerX, centerZ, shape, minY, maxY, callback);
-                    return;
-                }
-
-                int y = highest + 1;
-                if (world.getEnvironment() == World.Environment.NETHER) {
-                    y = findSafeNetherY(snapshot, localX, localZ, minY, maxY);
-                    if (y == Integer.MIN_VALUE) {
-                        findCandidate(player, world, settings, attempts, attempt + 1, minRadius, maxRadius,
-                                useBorder, centerX, centerZ, shape, minY, maxY, callback);
-                        return;
-                    }
-                }
-
-                Material floor = snapshot.getBlockType(localX, y - 1, localZ);
-                Material feet = snapshot.getBlockType(localX, y, localZ);
-                Material head = snapshot.getBlockType(localX, y + 1, localZ);
-
-                if (!isSafeMaterials(floor, feet, head)) {
-                    findCandidate(player, world, settings, attempts, attempt + 1, minRadius, maxRadius,
-                            useBorder, centerX, centerZ, shape, minY, maxY, callback);
-                    return;
-                }
-
-                callback.accept(new Location(world, blockX + 0.5D, y, blockZ + 0.5D));
-            } catch (Throwable throwable) {
-                plugin.getLogger().warning("Falha ao analisar chunk do RTP em " + chunkX + "," + chunkZ
-                        + " no mundo " + world.getName() + ": " + throwable.getMessage());
+            if (highest < minY || highest > maxY) {
                 findCandidate(player, world, settings, attempts, attempt + 1, minRadius, maxRadius,
                         useBorder, centerX, centerZ, shape, minY, maxY, callback);
+                return;
             }
+
+            int y = highest + 1;
+            if (world.getEnvironment() == World.Environment.NETHER) {
+                y = findSafeNetherY(snapshot, localX, localZ, minY, maxY);
+                if (y == Integer.MIN_VALUE) {
+                    findCandidate(player, world, settings, attempts, attempt + 1, minRadius, maxRadius,
+                            useBorder, centerX, centerZ, shape, minY, maxY, callback);
+                    return;
+                }
+            }
+
+            Material floor = snapshot.getBlockType(localX, y - 1, localZ);
+            Material feet = snapshot.getBlockType(localX, y, localZ);
+            Material head = snapshot.getBlockType(localX, y + 1, localZ);
+
+            if (!isSafeMaterials(floor, feet, head)) {
+                findCandidate(player, world, settings, attempts, attempt + 1, minRadius, maxRadius,
+                        useBorder, centerX, centerZ, shape, minY, maxY, callback);
+                return;
+            }
+
+            callback.accept(new Location(world, blockX + 0.5D, y, blockZ + 0.5D));
         } catch (Throwable throwable) {
             plugin.getLogger().warning("Falha ao analisar chunk do RTP em " + chunkX + "," + chunkZ
                     + " no mundo " + world.getName() + ": " + throwable.getMessage());
