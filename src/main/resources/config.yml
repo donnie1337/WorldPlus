@@ -162,6 +162,7 @@ titles:
     fade-in: 5
     duracao: 40
     fade-out: 10
+    artigo-padrao: "no"
 
   # Nomes personalizados dos biomas.
   # Se um bioma não estiver listado, o WorldPlus formata
@@ -222,6 +223,17 @@ titles:
     end_midlands: "Terras Médias do End"
     small_end_islands: "Pequenas Ilhas do End"
     end_barrens: "Ermos do End"
+    deep_cold_ocean: "Oceano Profundo Frio"
+    deep_frozen_ocean: "Oceano Profundo Congelado"
+    deep_lukewarm_ocean: "Oceano Profundo Morno"
+    lukewarm_ocean: "Oceano Morno"
+    old_growth_birch_forest: "Floresta de Bétulas Antigas"
+    pale_garden: "Jardim Pálido"
+    savanna_plateau: "Planalto de Savanna"
+    snowy_beach: "Praia Nevada"
+    snowy_slopes: "Encostas Nevadas"
+    sulfur_caves: "Cavernas de Enxofre"
+    the_void: "O Vazio"
 
   artigos:
     savanna: "na"
@@ -279,6 +291,17 @@ titles:
     end_midlands: "nas"
     small_end_islands: "nas"
     end_barrens: "nos"
+    deep_cold_ocean: "no"
+    deep_frozen_ocean: "no"
+    deep_lukewarm_ocean: "no"
+    lukewarm_ocean: "no"
+    old_growth_birch_forest: "na"
+    pale_garden: "no"
+    savanna_plateau: "no"
+    snowy_beach: "na"
+    snowy_slopes: "nas"
+    sulfur_caves: "nas"
+    the_void: "no"
 
 mensagens:
   prefixo: "&7&lᴡᴏʀʟᴅᴘʟᴜs &8• &r"
