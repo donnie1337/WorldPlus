@@ -350,16 +350,6 @@ public final class RtpManager implements Listener {
         int minY = plugin.getConfig().getInt("rtp.mundos." + settings.id() + ".y-minimo", 0);
         int maxY = plugin.getConfig().getInt("rtp.mundos." + settings.id() + ".y-maximo", 320);
 
-        // O RTP só atende quando a área configurada já foi pré-gerada.
-        // A pré-geração acontece automaticamente pelo WorldPlus e salva as chunks
-        // no disco. Assim, /rtp nunca precisa gerar terreno no momento do comando.
-        RtpPreGenerator preGenerator = plugin.getRtpPreGenerator();
-        if (preGenerator != null && !preGenerator.isReady(settings.id())) {
-            Bukkit.getScheduler().runTaskLater(plugin,
-                    () -> findSafeLocationAsync(player, world, settings, attempts, callback), 20L);
-            return;
-        }
-
         findCandidate(player, world, settings, attempts, 0, centerX, centerZ,
                 minRadius, maxRadius, minY, maxY, callback);
     }
@@ -425,19 +415,12 @@ public final class RtpManager implements Listener {
             return;
         }
 
-        // Somente carrega do disco uma chunk que já foi gerada. Nunca geramos
-        // uma chunk nova durante o teleporte.
         Bukkit.getScheduler().runTask(plugin, () -> {
             try {
-                if (!world.isChunkGenerated(chunkX, chunkZ)) {
-                    callback.accept(false);
-                    return;
-                }
-
-                org.bukkit.Chunk chunk = world.getChunkAt(chunkX, chunkZ, false);
-                callback.accept(chunk != null && world.isChunkLoaded(chunkX, chunkZ));
+                org.bukkit.Chunk chunk = world.getChunkAt(chunkX, chunkZ, true);
+                callback.accept(chunk != null);
             } catch (Throwable throwable) {
-                plugin.getLogger().warning("Falha ao carregar chunk RTP "
+                plugin.getLogger().warning("Falha ao preparar chunk RTP "
                         + chunkX + "," + chunkZ + " em " + world.getName()
                         + ": " + throwable.getMessage());
                 callback.accept(false);
