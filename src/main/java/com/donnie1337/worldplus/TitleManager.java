@@ -94,17 +94,7 @@ public final class TitleManager implements Listener {
         String configured = plugin.getConfig().getString("titles.artigos." + biome.getKey().getKey());
         if (configured != null && !configured.isBlank()) return configured;
 
-        return switch (biome.getKey().getKey()) {
-            case "savanna", "plains", "forest", "birch_forest", "dark_forest",
-                 "jungle", "sparse_jungle", "bamboo_jungle", "swamp", "mangrove_swamp",
-                 "taiga", "snowy_taiga", "old_growth_pine_taiga", "old_growth_spruce_taiga",
-                 "flower_forest", "meadow", "cherry_grove", "grove", "snowy_plains",
-                 "sunflower_plains", "ice_spikes", "beach", "stony_shore" -> "na";
-            case "windswept_hills", "windswept_forest", "windswept_gravelly_hills",
-                 "windswept_savanna", "mountains", "jagged_peaks", "frozen_peaks",
-                 "stony_peaks", "dripstone_caves", "lush_caves", "deep_dark" -> "nas";
-            default -> "no";
-        };
+        return plugin.getConfig().getString("titles.artigo-padrao", "no");
     }
 
     private String color(String text) {
