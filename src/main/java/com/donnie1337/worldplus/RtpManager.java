@@ -220,9 +220,19 @@ public final class RtpManager implements Listener {
                 }
 
                 try {
+                    // Gera somente a chunk sorteada. Depois dela estar pronta,
+                    // procuramos uma superfície válida dentro dela inteira.
+                    // Assim não precisamos gerar dezenas de chunks para achar
+                    // uma coluna segura.
                     world.getChunkAt(chunkX, chunkZ, true);
+
+                    Location safe = analyzeChunkForSurface(world, chunkX, chunkZ, minY, maxY);
+                    if (safe != null) {
+                        callback.accept(safe);
+                        return;
+                    }
                 } catch (Throwable throwable) {
-                    plugin.getLogger().warning("Falha ao gerar chunk do RTP em " + chunkX + "," + chunkZ
+                    plugin.getLogger().warning("Falha ao gerar/analisar chunk do RTP em " + chunkX + "," + chunkZ
                             + " no mundo " + world.getName() + ": " + throwable.getMessage());
                 }
 
@@ -233,32 +243,48 @@ public final class RtpManager implements Listener {
         }
 
         try {
-            org.bukkit.Chunk chunk = world.getChunkAt(chunkX, chunkZ, false);
-            org.bukkit.ChunkSnapshot snapshot = chunk.getChunkSnapshot(true, false, false);
-            int localX = blockX & 15;
-            int localZ = blockZ & 15;
-            int highest = snapshot.getHighestBlockYAt(localX, localZ);
-
-            if (highest < minY || highest > maxY) {
-                findCandidate(player, world, settings, attempts, attempt + 1, minRadius, maxRadius,
-                        useBorder, centerX, centerZ, shape, minY, maxY, callback);
+            Location safe = analyzeChunkForSurface(world, chunkX, chunkZ, minY, maxY);
+            if (safe != null) {
+                callback.accept(safe);
                 return;
             }
 
-            Location safe = findSafeSurface(snapshot, world, blockX, blockZ, localX, localZ, minY, maxY);
-            if (safe == null) {
-                findCandidate(player, world, settings, attempts, attempt + 1, minRadius, maxRadius,
-                        useBorder, centerX, centerZ, shape, minY, maxY, callback);
-                return;
-            }
-
-            callback.accept(safe);
+            findCandidate(player, world, settings, attempts, attempt + 1, minRadius, maxRadius,
+                    useBorder, centerX, centerZ, shape, minY, maxY, callback);
         } catch (Throwable throwable) {
             plugin.getLogger().warning("Falha ao analisar chunk do RTP em " + chunkX + "," + chunkZ
                     + " no mundo " + world.getName() + ": " + throwable.getMessage());
             findCandidate(player, world, settings, attempts, attempt + 1, minRadius, maxRadius,
                     useBorder, centerX, centerZ, shape, minY, maxY, callback);
         }
+    }
+
+    private Location analyzeChunkForSurface(World world, int chunkX, int chunkZ, int minY, int maxY) {
+        org.bukkit.Chunk chunk = world.getChunkAt(chunkX, chunkZ, false);
+        org.bukkit.ChunkSnapshot snapshot = chunk.getChunkSnapshot(true, false, false);
+
+        int start = ThreadLocalRandom.current().nextInt(256);
+
+        // Uma única chunk já possui 256 colunas. Em vez de testar apenas a
+        // coluna sorteada, percorremos as colunas em ordem pseudo-aleatória.
+        // O destino continua partindo de uma chunk aleatória da WorldBorder,
+        // mas aproveitamos toda a área gerada para encontrar uma superfície.
+        for (int offset = 0; offset < 256; offset++) {
+            int index = (start + offset) & 255;
+            int localX = index & 15;
+            int localZ = index >> 4;
+
+            int highest = snapshot.getHighestBlockYAt(localX, localZ);
+            if (highest < minY || highest > maxY) continue;
+
+            Location safe = findSafeSurface(snapshot, world,
+                    chunkX * 16 + localX, chunkZ * 16 + localZ,
+                    localX, localZ, minY, maxY);
+
+            if (safe != null) return safe;
+        }
+
+        return null;
     }
 
     private Location findSafeSurface(org.bukkit.ChunkSnapshot snapshot, World world, int blockX, int blockZ,
