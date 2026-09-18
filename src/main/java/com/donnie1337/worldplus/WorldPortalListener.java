@@ -9,8 +9,13 @@ import org.bukkit.event.Listener;
 import org.bukkit.event.player.PlayerPortalEvent;
 import org.bukkit.event.player.PlayerTeleportEvent;
 
+import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+
 public final class WorldPortalListener implements Listener {
     private final WorldPlus plugin;
+    private final Map<UUID, String> netherReturnWorld = new ConcurrentHashMap<>();
 
     public WorldPortalListener(WorldPlus plugin) {
         this.plugin = plugin;
@@ -32,26 +37,54 @@ public final class WorldPortalListener implements Listener {
         Player player = event.getPlayer();
         World current = player.getWorld();
 
-        World overworld = plugin.getDimensionWorld("overworld", World.Environment.NORMAL);
         World nether = plugin.getDimensionWorld("nether", World.Environment.NETHER);
-
-        if (overworld == null || nether == null) {
-            plugin.getLogger().warning("Não foi possível conectar o portal do Nether: overworld ou nether não está disponível.");
+        if (nether == null) {
+            plugin.getLogger().warning("Não foi possível conectar o portal do Nether: world_nether não está disponível.");
             return;
         }
 
-        if (current.getUID().equals(overworld.getUID())) {
-            Location target = scaleNether(event.getFrom(), nether);
-            event.setTo(target);
+        if (isNormalWorld(current)) {
+            String returnWorldId = findNormalWorldId(current);
+            if (returnWorldId != null) {
+                netherReturnWorld.put(player.getUniqueId(), returnWorldId);
+            }
+
+            event.setTo(scaleNether(event.getFrom(), nether));
             event.setCanCreatePortal(true);
             return;
         }
 
         if (current.getUID().equals(nether.getUID())) {
-            Location target = scaleOverworld(event.getFrom(), overworld);
-            event.setTo(target);
+            String returnWorldId = netherReturnWorld.remove(player.getUniqueId());
+            World target = returnWorldId == null
+                    ? plugin.getDimensionWorld("overworld", World.Environment.NORMAL)
+                    : plugin.getDimensionWorld(returnWorldId, World.Environment.NORMAL);
+
+            if (target == null) {
+                plugin.getLogger().warning("Não foi possível encontrar o mundo de retorno do jogador " + player.getName() + ".");
+                return;
+            }
+
+            event.setTo(scaleOverworld(event.getFrom(), target));
             event.setCanCreatePortal(true);
         }
+    }
+
+    private boolean isNormalWorld(World world) {
+        return world.getEnvironment() == World.Environment.NORMAL
+                && findNormalWorldId(world) != null;
+    }
+
+    private String findNormalWorldId(World world) {
+        for (var settings : plugin.getWorlds().values()) {
+            if (settings.environment() == World.Environment.NORMAL
+                    && settings.name().equalsIgnoreCase(world.getName())
+                    && (settings.id().equalsIgnoreCase("overworld")
+                    || settings.id().equalsIgnoreCase("mineracao"))) {
+                return settings.id();
+            }
+        }
+        return null;
     }
 
     private void handleEndPortal(PlayerPortalEvent event) {
