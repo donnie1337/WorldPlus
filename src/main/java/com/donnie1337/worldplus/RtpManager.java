@@ -192,12 +192,11 @@ public final class RtpManager implements Listener {
         int chunkX = blockX >> 4;
         int chunkZ = blockZ >> 4;
 
-        // A geração é solicitada pelo pipeline assíncrono do servidor. O callback
-        // volta para a thread principal, evitando getHighestBlockYAt/getBlockAt
-        // em um chunk que ainda não foi gerado.
-        org.bukkit.Chunk chunk = world.getChunkAt(chunkX, chunkZ, true);
+        // Spigot 26.2 não expõe getChunkAtAsync na API Bukkit.
+        // A geração/carregamento é solicitado pela API síncrona do mundo.
+        org.bukkit.Chunk chunk;
         try {
-            try {
+            chunk = world.getChunkAt(chunkX, chunkZ, true);
                 org.bukkit.ChunkSnapshot snapshot = chunk.getChunkSnapshot(true, false, false);
                 int localX = blockX & 15;
                 int localZ = blockZ & 15;
