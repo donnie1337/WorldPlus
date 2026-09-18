@@ -448,9 +448,15 @@ public final class RtpManager implements Listener {
     private void retryCandidate(Player player, World world, WorldSettings settings, int attempts, int attempt,
                                 double centerX, double centerZ, double halfSize, int minY, int maxY,
                                 java.util.function.Consumer<Location> callback) {
+        int minRadius = Math.max(0, plugin.getConfig().getInt(
+                "rtp.mundos." + settings.id() + ".raio-minimo", 0));
+        int maxRadius = Math.max(minRadius + 1, plugin.getConfig().getInt(
+                "rtp.mundos." + settings.id() + ".raio-maximo",
+                (int) (world.getWorldBorder().getSize() / 2.0D)));
+
         Bukkit.getScheduler().runTaskLater(plugin,
                 () -> findCandidate(player, world, settings, attempts, attempt + 1,
-                        centerX, centerZ, halfSize, minY, maxY, callback), 1L);
+                        centerX, centerZ, minRadius, maxRadius, minY, maxY, callback), 1L);
     }
 
     private Location analyzeChunkForSurface(World world, int chunkX, int chunkZ, int minY, int maxY) {
