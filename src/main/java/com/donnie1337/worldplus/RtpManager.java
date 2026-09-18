@@ -425,10 +425,17 @@ public final class RtpManager implements Listener {
             return;
         }
 
+        if (RtpChunkLoader.request(plugin, world, chunkX, chunkZ, callback)) {
+            return;
+        }
+
+        // Fallback somente se a ponte NMS assíncrona não estiver disponível.
+        // Em Spigot 26.2 a ponte deve ser usada normalmente; este caminho
+        // preserva funcionamento caso a implementação interna mude.
         Bukkit.getScheduler().runTask(plugin, () -> {
             try {
                 org.bukkit.Chunk chunk = world.getChunkAt(chunkX, chunkZ, true);
-                callback.accept(chunk != null);
+                callback.accept(chunk != null && chunk.isGenerated());
             } catch (Throwable throwable) {
                 plugin.getLogger().warning("Falha ao preparar chunk RTP "
                         + chunkX + "," + chunkZ + " em " + world.getName()
