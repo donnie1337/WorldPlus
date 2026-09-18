@@ -114,6 +114,12 @@ public final class RtpManager implements Listener {
         // A variável world acima pode ser reatribuída durante o carregamento.
         final World rtpWorld = world;
 
+        // No primeiro uso do RTP, mostra o title de preparação.
+        // O title de bioma será exibido assim que o jogador chegar ao destino.
+        if (plugin.getTitleManager() != null) {
+            plugin.getTitleManager().showRtpPreparing(player);
+        }
+
         int attempts = Math.max(1, plugin.getConfig().getInt("rtp.geral.max-tentativas", 32));
         findSafeLocationAsync(player, rtpWorld, settings, attempts, safe -> {
             if (safe == null) {
@@ -123,6 +129,9 @@ public final class RtpManager implements Listener {
             }
 
             player.teleport(safe);
+            if (plugin.getTitleManager() != null) {
+                plugin.getTitleManager().showBiomeAfterRtp(player, safe);
+            }
             cooldowns.put(player.getUniqueId(), System.currentTimeMillis() + cooldownSeconds(settings) * 1000L);
             heatmap.merge(rtpWorld.getName(), 1L, Long::sum);
             message(player, "teleportado", "&aTeleportado aleatoriamente para &f{id}&a.", "id", settings.id());
