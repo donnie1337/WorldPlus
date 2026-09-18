@@ -104,6 +104,7 @@ public final class RtpPreGenerator {
                 } else {
                     world.getChunkAt(currentX, currentZ, true);
                 }
+            } catch (Throwable throwable) {
                 plugin.getLogger().warning("WorldPlus: falha ao pré-gerar chunk "
                         + currentX + "," + currentZ + " em " + world.getName()
                         + ": " + throwable.getMessage());
