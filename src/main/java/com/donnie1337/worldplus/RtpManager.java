@@ -195,7 +195,8 @@ public final class RtpManager implements Listener {
         // A geração é solicitada pelo pipeline assíncrono do servidor. O callback
         // volta para a thread principal, evitando getHighestBlockYAt/getBlockAt
         // em um chunk que ainda não foi gerado.
-        world.getChunkAtAsync(chunkX, chunkZ, true, chunk -> {
+        org.bukkit.Chunk chunk = world.getChunkAt(chunkX, chunkZ, true);
+        try {
             try {
                 org.bukkit.ChunkSnapshot snapshot = chunk.getChunkSnapshot(true, false, false);
                 int localX = blockX & 15;
@@ -235,7 +236,12 @@ public final class RtpManager implements Listener {
                 findCandidate(player, world, settings, attempts, attempt + 1, minRadius, maxRadius,
                         useBorder, centerX, centerZ, shape, minY, maxY, callback);
             }
-        });
+        } catch (Throwable throwable) {
+            plugin.getLogger().warning("Falha ao analisar chunk do RTP em " + chunkX + "," + chunkZ
+                    + " no mundo " + world.getName() + ": " + throwable.getMessage());
+            findCandidate(player, world, settings, attempts, attempt + 1, minRadius, maxRadius,
+                    useBorder, centerX, centerZ, shape, minY, maxY, callback);
+        }
     }
 
     private int findSafeNetherY(org.bukkit.ChunkSnapshot snapshot, int localX, int localZ, int minY, int maxY) {
@@ -266,6 +272,10 @@ public final class RtpManager implements Listener {
 
     private boolean isAirLike(Material material) {
         return material.isAir() || material == Material.WATER;
+    }
+
+    private double randomBetween(double min, double max) {
+        return ThreadLocalRandom.current().nextDouble(min, max);
     }
 
     private long cooldownSeconds(WorldSettings settings) {
