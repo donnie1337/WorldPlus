@@ -130,7 +130,10 @@ rtp:
 mensagens:
   prefixo: "&7&lᴡᴏʀʟᴅᴘʟᴜs &8• &r"
   sem-permissao: "&cVocê não tem permissão para executar este comando."
-  uso: "&cUso: /mundos <lista|info|tp|spawn|setspawn|criar|excluir|recarregar>"
+  uso: "&cUso: /mundos <lista|info|tp|borda|spawn|setspawn|criar|excluir|recarregar>"
+  uso-borda: "&cUso: /mundos borda [mundo] [norte|sul|leste|oeste]"
+  borda-teleporte: "&aTeleportado para a borda de &f{id}&a."
+  borda-sem-local: "&cNão foi encontrado um local seguro próximo à borda de &f{id}&c."
   mundo-nao-encontrado: "&cMundo configurado não encontrado: &f{id}&c."
   mundo-criado: "&aMundo &f{id} &acriado/carregado com sucesso."
   mundo-ja-carregado: "&eMundo &f{id} &ejá está carregado."
