@@ -215,6 +215,7 @@ public final class RtpManager implements Listener {
     private Location findSafeColumn(World world, Chunk chunk) {
         ThreadLocalRandom random = ThreadLocalRandom.current();
         int start = random.nextInt(256);
+        boolean nether = world.getEnvironment() == World.Environment.NETHER;
 
         for (int offset = 0; offset < 256; offset++) {
             int index = (start + offset) & 255;
@@ -223,8 +224,34 @@ public final class RtpManager implements Listener {
 
             int x = (chunk.getX() << 4) + localX;
             int z = (chunk.getZ() << 4) + localZ;
-            int y = world.getHighestBlockYAt(x, z);
 
+            if (nether) {
+                // No Nether, nunca usa a camada de bedrock do teto como referência.
+                // Procura de cima para baixo somente abaixo do teto, até encontrar
+                // uma coluna com chão sólido e dois blocos de espaço.
+                int maxY = Math.min(world.getMaxHeight() - 2, 126);
+                int minY = world.getMinHeight() + 1;
+
+                for (int y = maxY; y >= minY; y--) {
+                    Material floor = world.getBlockAt(x, y, z).getType();
+                    Material feet = world.getBlockAt(x, y + 1, z).getType();
+                    Material head = world.getBlockAt(x, y + 2, z).getType();
+
+                    if (floor == Material.BEDROCK || feet == Material.BEDROCK || head == Material.BEDROCK) {
+                        continue;
+                    }
+
+                    if (isLiquid(floor) || isLiquid(feet) || isLiquid(head)) continue;
+                    if (!floor.isSolid()) continue;
+                    if (!feet.isAir() || !head.isAir()) continue;
+
+                    return new Location(world, x + 0.5D, y + 1.0D, z + 0.5D);
+                }
+
+                continue;
+            }
+
+            int y = world.getHighestBlockYAt(x, z);
             if (y < world.getMinHeight() || y + 2 >= world.getMaxHeight()) continue;
 
             Material floor = world.getBlockAt(x, y, z).getType();
