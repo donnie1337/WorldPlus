@@ -119,9 +119,6 @@ public final class WorldPlus extends JavaPlugin {
         return titleManager;
     }
 
-    public RtpPreGenerator getRtpPreGenerator() {
-        return rtpPreGenerator;
-    }
 
     public World getDimensionWorld(String id, World.Environment environment) {
         WorldSettings settings = getSettings(id);
