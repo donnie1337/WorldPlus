@@ -2,6 +2,7 @@ package com.donnie1337.worldplus;
 
 import org.bukkit.Bukkit;
 import org.bukkit.World;
+
 import java.util.ArrayList;
 import java.util.List;
 
@@ -9,8 +10,8 @@ public final class RtpPreGenerator {
     private final WorldPlus plugin;
     private final List<WorldSettings> worlds = new ArrayList<>();
     private int worldIndex;
-    private int chunkX;
-    private int chunkZ;
+    private int ring;
+    private int ringSide;
     private long totalProcessed;
     private long totalSkipped;
 
@@ -21,7 +22,7 @@ public final class RtpPreGenerator {
 
     public void start() {
         if (worlds.isEmpty()) {
-            plugin.getLogger().info("WorldPlus: pré-geração do RTP não encontrou mundos configurados.");
+            plugin.getLogger().info("WorldPlus: pré-geração não encontrou mundos configurados.");
             return;
         }
 
@@ -35,7 +36,6 @@ public final class RtpPreGenerator {
         if (worldIndex >= worlds.size()) return true;
         WorldSettings settings = plugin.getSettings(worldId);
         if (settings == null) return true;
-
         for (int i = 0; i < worldIndex; i++) {
             if (worlds.get(i).id().equalsIgnoreCase(settings.id())) return true;
         }
@@ -47,31 +47,27 @@ public final class RtpPreGenerator {
 
         WorldSettings settings = worlds.get(worldIndex);
         World world = Bukkit.getWorld(settings.name());
-        if (world == null) {
-            world = plugin.createOrLoadWorld(settings);
-        }
+        if (world == null) world = plugin.createOrLoadWorld(settings);
 
         if (world == null) {
-            plugin.getLogger().warning("WorldPlus: não foi possível iniciar a pré-geração de RTP em " + settings.name() + ".");
+            plugin.getLogger().warning("WorldPlus: não foi possível pré-gerar " + settings.name() + ".");
             worldIndex++;
             prepareWorld();
             return;
         }
 
-        int halfSize = Math.max(1, (int) Math.ceil(settings.size() / 2.0D));
-        chunkX = (int) Math.floor((-halfSize) / 16.0D);
-        chunkZ = (int) Math.floor((-halfSize) / 16.0D);
+        ring = 0;
+        ringSide = 0;
+        totalProcessed = 0;
+        totalSkipped = 0;
 
-        plugin.getLogger().info("WorldPlus: iniciando pré-geração completa de " + settings.id()
-                + " (" + settings.size() + "x" + settings.size() + " blocos).");
+        plugin.getLogger().info("WorldPlus: iniciando pré-geração de " + settings.id()
+                + " (" + settings.size() + "x" + settings.size()
+                + "), começando pelo centro para disponibilizar o RTP rapidamente.");
     }
 
     private void tick() {
-        if (!plugin.isEnabled()) return;
-
-        if (worldIndex >= worlds.size()) {
-            return;
-        }
+        if (!plugin.isEnabled() || worldIndex >= worlds.size()) return;
 
         WorldSettings settings = worlds.get(worldIndex);
         World world = Bukkit.getWorld(settings.name());
@@ -82,45 +78,88 @@ public final class RtpPreGenerator {
         }
 
         int halfSize = Math.max(1, (int) Math.ceil(settings.size() / 2.0D));
-        int minChunk = (int) Math.floor(-halfSize / 16.0D);
         int maxChunk = (int) Math.ceil(halfSize / 16.0D) - 1;
+        int minChunk = (int) Math.floor(-halfSize / 16.0D);
 
-        while (chunkX <= maxChunk) {
-            if (chunkZ > maxChunk) {
-                chunkX++;
-                chunkZ = minChunk;
-                continue;
-            }
-
-            int currentX = chunkX;
-            int currentZ = chunkZ;
-            chunkZ++;
-
-            totalProcessed++;
-
-            try {
-                if (world.isChunkGenerated(currentX, currentZ)) {
-                    totalSkipped++;
-                } else {
-                    world.getChunkAt(currentX, currentZ, true);
-                }
-            } catch (Throwable throwable) {
-                plugin.getLogger().warning("WorldPlus: falha ao pré-gerar chunk "
-                        + currentX + "," + currentZ + " em " + world.getName()
-                        + ": " + throwable.getMessage());
-            }
-
-            if (totalProcessed % 1000 == 0) {
-                plugin.getLogger().info("WorldPlus: pré-geração RTP " + settings.id()
-                        + " — " + totalProcessed + " chunks processadas, "
-                        + totalSkipped + " já existentes.");
-            }
+        int[] coordinate = nextChunk(maxChunk, minChunk);
+        if (coordinate == null) {
+            plugin.getLogger().info("WorldPlus: pré-geração concluída para " + settings.id()
+                    + " — " + totalProcessed + " chunks processadas, "
+                    + totalSkipped + " já existentes.");
+            worldIndex++;
+            prepareWorld();
             return;
         }
 
-        plugin.getLogger().info("WorldPlus: pré-geração RTP concluída para " + settings.id() + ".");
-        worldIndex++;
-        prepareWorld();
+        int x = coordinate[0];
+        int z = coordinate[1];
+        totalProcessed++;
+
+        try {
+            if (world.isChunkGenerated(x, z)) {
+                totalSkipped++;
+            } else {
+                world.getChunkAt(x, z, true);
+            }
+        } catch (Throwable throwable) {
+            plugin.getLogger().warning("WorldPlus: falha ao pré-gerar chunk "
+                    + x + "," + z + " em " + world.getName() + ": "
+                    + throwable.getMessage());
+        }
+
+        if (totalProcessed % 1000 == 0) {
+            plugin.getLogger().info("WorldPlus: pré-geração " + settings.id()
+                    + " — " + totalProcessed + " chunks processadas, "
+                    + totalSkipped + " já existentes.");
+        }
     }
 
+    private int[] nextChunk(int maxChunk, int minChunk) {
+        if (ring == 0) {
+            ring = 1;
+            return new int[]{0, 0};
+        }
+
+        int x;
+        int z;
+        int r = ring;
+
+        switch (ringSide) {
+            case 0 -> {
+                x = -r + ringSideOffset(r);
+                z = -r;
+            }
+            case 1 -> {
+                x = r;
+                z = -r + ringSideOffset(r);
+            }
+            case 2 -> {
+                x = r - ringSideOffset(r);
+                z = r;
+            }
+            default -> {
+                x = -r;
+                z = r - ringSideOffset(r);
+            }
+        }
+
+        ringSideOffset++;
+
+        if (ringSideOffset > r * 2) {
+            ringSideOffset = 0;
+            ringSide++;
+            if (ringSide > 3) {
+                ringSide = 0;
+                ring++;
+            }
+        }
+
+        if (x < minChunk || x > maxChunk || z < minChunk || z > maxChunk) {
+            return nextChunk(maxChunk, minChunk);
+        }
+
+        return new int[]{x, z};
+    }
+
+    private int ringSideOffset;
 }
