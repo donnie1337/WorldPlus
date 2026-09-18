@@ -218,7 +218,7 @@ public final class WorldCommand implements CommandExecutor, TabCompleter {
         double maxZ = center.getZ() + half;
         double margin = 5.0D;
 
-        String side = direction == null ? nearestSide(player.getLocation(), minX, maxX, minZ, maxZ) : direction.toLowerCase();
+        String side = direction == null ? nearestSide(player.getLocation(), minX, maxX, minZ, maxZ) : normalizeDirection(direction);
         double x = Math.max(minX + margin, Math.min(maxX - margin, player.getLocation().getX()));
         double z = Math.max(minZ + margin, Math.min(maxZ - margin, player.getLocation().getZ()));
 
@@ -298,6 +298,16 @@ public final class WorldCommand implements CommandExecutor, TabCompleter {
         return material.isAir();
     }
 
+    private String normalizeDirection(String value) {
+        return switch (value.toLowerCase()) {
+            case "norte", "north" -> "norte";
+            case "sul", "south" -> "sul";
+            case "leste", "east" -> "leste";
+            case "oeste", "west" -> "oeste";
+            default -> value.toLowerCase();
+        };
+    }
+
     private boolean isDirection(String value) {
         return value != null && switch (value.toLowerCase()) {
             case "norte", "north", "sul", "south", "leste", "east", "oeste", "west" -> true;
@@ -331,7 +341,7 @@ public final class WorldCommand implements CommandExecutor, TabCompleter {
     }
 
     private boolean usage(CommandSender sender) {
-        sender.sendMessage(color(msg("uso", "&cUso: /mundos <lista|info|tp|spawn|setspawn|criar|excluir|recarregar>")));
+        sender.sendMessage(color(msg("uso", "&cUso: /mundos <lista|info|tp|borda|spawn|setspawn|criar|excluir|recarregar>")));
         return true;
     }
 
@@ -347,10 +357,15 @@ public final class WorldCommand implements CommandExecutor, TabCompleter {
     public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] args) {
         if (!sender.hasPermission("worldplus.use")) return Collections.emptyList();
         if (args.length == 1) return partial(List.of("lista", "info", "tp", "borda", "spawn", "setspawn", "criar", "excluir", "recarregar"), args[0]);
-        if (args.length == 2 && List.of("info", "tp", "borda", "spawn", "setspawn", "criar", "excluir").contains(args[0].toLowerCase()))
+        if (args.length == 2 && List.of("info", "tp", "borda", "spawn", "setspawn", "criar", "excluir").contains(args[0].toLowerCase())) {
+            if (args[0].equalsIgnoreCase("borda")) {
+                List<String> values = new ArrayList<>(plugin.getWorlds().keySet());
+                values.addAll(List.of("norte", "sul", "leste", "oeste"));
+                return partial(values, args[1]);
+            }
             return partial(new ArrayList<>(plugin.getWorlds().keySet()), args[1]);
+        }
         if (args.length == 3 && args[0].equalsIgnoreCase("borda")) {
-            if (isDirection(args[1])) return partial(List.of("norte", "sul", "leste", "oeste"), args[2]);
             return partial(List.of("norte", "sul", "leste", "oeste"), args[2]);
         }
         if (args.length == 3 && args[0].equalsIgnoreCase("tp") && sender.hasPermission("worldplus.admin"))
