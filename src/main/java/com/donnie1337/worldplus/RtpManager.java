@@ -63,6 +63,11 @@ public final class RtpManager implements Listener {
         int delay = plugin.getConfig().getInt("rtp.geral.atraso-segundos", 5);
         boolean cancelOnMove = plugin.getConfig().getBoolean("rtp.geral.cancelar-ao-mover", true);
 
+        int titleWaitTicks = Math.max(1, (delay + Math.max(1, plugin.getConfig().getInt("rtp.geral.pre-carregar-segundos", 3))) * 20);
+        if (plugin.getTitleManager() != null) {
+            plugin.getTitleManager().showRtpLoading(player, titleWaitTicks);
+        }
+
         if (delay > 0 && !player.hasPermission("worldplus.rtp.bypass.delay")) {
             pendingWorlds.put(player.getUniqueId(), settings.id());
             delays.put(player.getUniqueId(), System.currentTimeMillis() + delay * 1000L);
@@ -140,31 +145,23 @@ public final class RtpManager implements Listener {
             plugin.getTitleManager().showRtpLoading(player, waitTicks);
         }
 
-        // Mantemos a região imediata pronta para o momento do teleporte.
-        // O alvo já foi validado e gerado; os vizinhos só são carregados se
-        // já existirem, evitando gerar várias chunks pesadas de uma vez.
+        // A chunk do destino já foi gerada/analisada antes desta etapa.
+        // NÃO carregamos uma grade 3x3 aqui: loadChunk/addPluginChunkTicket
+        // podem carregar uma chunk imediatamente no thread principal.
+        // Isso foi a causa do travamento observado em RTP.
         int targetChunkX = safe.getBlockX() >> 4;
         int targetChunkZ = safe.getBlockZ() >> 4;
         List<int[]> tickets = new ArrayList<>();
 
-        for (int dx = -1; dx <= 1; dx++) {
-            for (int dz = -1; dz <= 1; dz++) {
-                int cx = targetChunkX + dx;
-                int cz = targetChunkZ + dz;
-                try {
-                    boolean generated = world.isChunkGenerated(cx, cz);
-                    if (!generated && (cx != targetChunkX || cz != targetChunkZ)) continue;
-                    if (!world.isChunkLoaded(cx, cz)) {
-                        world.loadChunk(cx, cz, generated);
-                    }
-                    if (world.isChunkLoaded(cx, cz) && world.addPluginChunkTicket(cx, cz, plugin)) {
-                        tickets.add(new int[]{cx, cz});
-                    }
-                } catch (Throwable throwable) {
-                    plugin.getLogger().warning("Falha ao pré-carregar chunk do RTP em " + cx + "," + cz
-                            + " no mundo " + world.getName() + ": " + throwable.getMessage());
-                }
+        try {
+            if (world.isChunkLoaded(targetChunkX, targetChunkZ)
+                    && world.addPluginChunkTicket(targetChunkX, targetChunkZ, plugin)) {
+                tickets.add(new int[]{targetChunkX, targetChunkZ});
             }
+        } catch (Throwable throwable) {
+            plugin.getLogger().warning("Falha ao manter a chunk do destino do RTP carregada em "
+                    + targetChunkX + "," + targetChunkZ + " no mundo " + world.getName()
+                    + ": " + throwable.getMessage());
         }
 
         preloadTickets.put(uuid, tickets);
