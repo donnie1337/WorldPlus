@@ -65,6 +65,7 @@ public final class WorldPlus extends JavaPlugin {
             boolean pvp = getConfig().getBoolean(path + ".pvp", true);
             boolean keepInventory = getConfig().getBoolean(path + ".manter-inventario", true);
             Difficulty difficulty = parseDifficulty(getConfig().getString(path + ".dificuldade", "NORMAL"));
+            boolean customSpawn = getConfig().contains(path + ".spawn.x");
             int spawnX = getConfig().getInt(path + ".spawn.x", 0);
             int spawnY = getConfig().getInt(path + ".spawn.y", 0);
             int spawnZ = getConfig().getInt(path + ".spawn.z", 0);
@@ -77,7 +78,7 @@ public final class WorldPlus extends JavaPlugin {
                 continue;
             }
             worlds.put(id.toLowerCase(), new WorldSettings(id.toLowerCase(), name, environment, seed, size,
-                    structures, removeStrongholds, pvp, keepInventory, difficulty,
+                    structures, removeStrongholds, pvp, keepInventory, difficulty, customSpawn,
                     spawnX, spawnY, spawnZ, spawnYaw, spawnPitch));
         }
     }
@@ -121,7 +122,9 @@ public final class WorldPlus extends JavaPlugin {
         border.setSize(settings.size());
         world.setPVP(settings.pvp());
         world.setDifficulty(settings.difficulty());
-        world.setSpawnLocation(settings.spawnX(), settings.spawnY(), settings.spawnZ(), settings.spawnYaw());
+        if (settings.customSpawn()) {
+            world.setSpawnLocation(settings.spawnX(), settings.spawnY(), settings.spawnZ(), settings.spawnYaw());
+        }
         world.setGameRuleValue("keepInventory", Boolean.toString(settings.keepInventory()));
     }
 
@@ -134,7 +137,7 @@ public final class WorldPlus extends JavaPlugin {
         saveConfig();
         WorldSettings updated = new WorldSettings(settings.id(), settings.name(), settings.environment(), settings.seed(),
                 settings.size(), settings.structures(), settings.removeStrongholds(), settings.pvp(),
-                settings.keepInventory(), settings.difficulty(), location.getBlockX(), location.getBlockY(),
+                settings.keepInventory(), settings.difficulty(), true, location.getBlockX(), location.getBlockY(),
                 location.getBlockZ(), location.getYaw(), location.getPitch());
         worlds.put(settings.id(), updated);
         world.setSpawnLocation(location.getBlockX(), location.getBlockY(), location.getBlockZ(), location.getYaw());
