@@ -30,7 +30,7 @@ mundos:
     nome: "mining"
     ambiente: "NORMAL"
     seed: 593817204761928405
-    tamanho: 10000
+    tamanho: 7000
     estruturas: true
     remover-strongholds: true
     pvp: true
