@@ -12,8 +12,10 @@ public final class RtpPreGenerator {
     private int worldIndex;
     private int ring;
     private int ringSide;
+    private int ringSideOffset;
     private long totalProcessed;
     private long totalSkipped;
+    private final java.util.Map<String, Integer> completedRadii = new java.util.HashMap<>();
 
     public RtpPreGenerator(WorldPlus plugin) {
         this.plugin = plugin;
@@ -43,8 +45,12 @@ public final class RtpPreGenerator {
     }
 
     public boolean isGenerating(String worldId) {
-        if (worldId == null || worldIndex >= worlds.size()) return false;
-        return true;
+        if (worldId == null) return false;
+        for (int i = 0; i < worlds.size(); i++) {
+            if (!worlds.get(i).id().equalsIgnoreCase(worldId)) continue;
+            return i == worldIndex && worldIndex < worlds.size();
+        }
+        return false;
     }
 
     /**
@@ -55,15 +61,13 @@ public final class RtpPreGenerator {
         if (worldId == null) return 0;
         for (WorldSettings settings : worlds) {
             if (!settings.id().equalsIgnoreCase(worldId)) continue;
-            if (worldIndex >= worlds.size()) {
-                return (int) Math.ceil(settings.size() / 2.0D);
+            if (completedRadii.containsKey(settings.id())) {
+                return completedRadii.get(settings.id());
             }
-            WorldSettings current = worlds.get(Math.min(worldIndex, worlds.size() - 1));
-            if (!current.id().equalsIgnoreCase(worldId)) {
-                int index = worlds.indexOf(settings);
-                return index < worldIndex ? (int) Math.ceil(settings.size() / 2.0D) : 0;
+            if (isGenerating(worldId)) {
+                return Math.max(0, (ring - 1) * 16);
             }
-            return Math.max(0, (ring - 1) * 16);
+            return 0;
         }
         return 0;
     }
@@ -77,6 +81,11 @@ public final class RtpPreGenerator {
 
         if (world == null) {
             plugin.getLogger().warning("WorldPlus: não foi possível pré-gerar " + settings.name() + ".");
+            int completedRadius = Math.min(
+                    (int) Math.ceil(settings.size() / 2.0D),
+                    Math.max(0, ring * 16)
+            );
+            completedRadii.put(settings.id(), completedRadius);
             worldIndex++;
             prepareWorld();
             return;
@@ -84,6 +93,7 @@ public final class RtpPreGenerator {
 
         ring = 0;
         ringSide = 0;
+        ringSideOffset = 0;
         totalProcessed = 0;
         totalSkipped = 0;
 
