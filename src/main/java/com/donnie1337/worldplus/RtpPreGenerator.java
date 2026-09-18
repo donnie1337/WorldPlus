@@ -126,12 +126,12 @@ public final class RtpPreGenerator {
 
         switch (ringSide) {
             case 0 -> {
-                x = -r + ringSideOffset(r);
+                x = -r + ringSideOffset;
                 z = -r;
             }
             case 1 -> {
                 x = r;
-                z = -r + ringSideOffset(r);
+                z = -r + ringSideOffset;
             }
             case 2 -> {
                 x = r - ringSideOffset(r);
