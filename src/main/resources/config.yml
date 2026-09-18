@@ -157,7 +157,7 @@ titles:
 
   bioma:
     habilitado: true
-    titulo: "&a&l{bioma}"
+    titulo: ""
     subtitulo: "&7Você está {artigo} &f{bioma}"
     fade-in: 5
     duracao: 40
