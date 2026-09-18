@@ -19,6 +19,7 @@ public final class TitleManager implements Listener {
     private final WorldPlus plugin;
     private final Map<UUID, String> lastBiomes = new HashMap<>();
     private final Map<UUID, Boolean> firstRtpTitleShown = new HashMap<>();
+    private final Map<UUID, Boolean> rtpTitleActive = new HashMap<>();
 
     public TitleManager(WorldPlus plugin) {
         this.plugin = plugin;
@@ -40,6 +41,8 @@ public final class TitleManager implements Listener {
     public void showRtpLoading(Player player, int stayTicks) {
         if (!plugin.getConfig().getBoolean("titles.rtp-preparando.habilitado", true)) return;
 
+        rtpTitleActive.put(player.getUniqueId(), true);
+
         int fadeIn = plugin.getConfig().getInt("titles.rtp-preparando.fade-in", 10);
         int fadeOut = plugin.getConfig().getInt("titles.rtp-preparando.fade-out", 10);
         sendTitle(player,
@@ -49,6 +52,7 @@ public final class TitleManager implements Listener {
     }
 
     public void showBiome(Player player, Location location) {
+        if (rtpTitleActive.getOrDefault(player.getUniqueId(), false)) return;
         if (!plugin.getConfig().getBoolean("titles.bioma.habilitado", true) || location == null) return;
 
         Biome biome = location.getWorld().getBiome(location);
@@ -60,7 +64,12 @@ public final class TitleManager implements Listener {
         sendBiomeTitle(player, biome);
     }
 
+    public void endRtpTitle(Player player) {
+        if (player != null) rtpTitleActive.remove(player.getUniqueId());
+    }
+
     public void showBiomeAfterRtp(Player player, Location location) {
+        endRtpTitle(player);
         if (location == null) return;
         Biome biome = location.getWorld().getBiome(location);
         lastBiomes.put(player.getUniqueId(), biome.getKey().toString());
@@ -145,5 +154,6 @@ public final class TitleManager implements Listener {
         UUID uuid = event.getPlayer().getUniqueId();
         lastBiomes.remove(uuid);
         firstRtpTitleShown.remove(uuid);
+        rtpTitleActive.remove(uuid);
     }
 }
