@@ -3,6 +3,7 @@ package com.donnie1337.worldplus;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.Material;
+import org.bukkit.NamespacedKey;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
@@ -14,6 +15,7 @@ import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
+import org.bukkit.persistence.PersistentDataType;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -22,10 +24,12 @@ import java.util.List;
 public final class RtpCommand implements CommandExecutor, TabCompleter, Listener {
     private final WorldPlus plugin;
     private final RtpManager manager;
+    private final NamespacedKey worldKey;
 
     public RtpCommand(WorldPlus plugin, RtpManager manager) {
         this.plugin = plugin;
         this.manager = manager;
+        this.worldKey = new NamespacedKey(plugin, "rtp-world");
     }
 
     public void openMenu(Player player) {
@@ -68,6 +72,7 @@ public final class RtpCommand implements CommandExecutor, TabCompleter, Listener
                 };
 
                 meta.setDisplayName(color(nome));
+                meta.getPersistentDataContainer().set(worldKey, PersistentDataType.STRING, settings.id());
                 String raio = format(
                         plugin.getConfig().getDouble(
                                 "rtp.mundos." + settings.id() + ".raio-maximo",
@@ -100,8 +105,8 @@ public final class RtpCommand implements CommandExecutor, TabCompleter, Listener
         event.setCancelled(true);
         ItemStack item = event.getCurrentItem();
         if (item == null || !item.hasItemMeta() || item.getItemMeta().getDisplayName() == null) return;
-        String id = ChatColor.stripColor(item.getItemMeta().getDisplayName());
-        if (plugin.getSettings(id) != null) {
+        String id = item.getItemMeta().getPersistentDataContainer().get(worldKey, PersistentDataType.STRING);
+        if (id != null && plugin.getSettings(id) != null) {
             player.closeInventory();
             manager.request(player, id);
         }
