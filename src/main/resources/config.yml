@@ -152,7 +152,7 @@ titles:
   rtp-preparando:
     habilitado: true
     titulo: "&f&lᴛᴇʟᴇᴘᴏʀᴛᴇ"
-    subtitulo: "&7Você está sendo teleportado..."
+    subtitulo: "&7Você será teleportado"
     fade-in: 10
     duracao: 40
     fade-out: 10
