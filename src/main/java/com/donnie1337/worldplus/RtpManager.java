@@ -23,6 +23,8 @@ public final class RtpManager implements Listener {
     private final Map<String, Long> heatmap = new HashMap<>();
     private final Set<UUID> processing = new HashSet<>();
     private final Queue<RtpRequest> queue = new ArrayDeque<>();
+    private final Map<UUID, BukkitTask> preloadTasks = new HashMap<>();
+    private final Map<UUID, List<int[]>> preloadTickets = new HashMap<>();
 
     public RtpManager(WorldPlus plugin) {
         this.plugin = plugin;
@@ -116,10 +118,6 @@ public final class RtpManager implements Listener {
 
         // No primeiro uso do RTP, mostra o title de preparação.
         // O title de bioma será exibido assim que o jogador chegar ao destino.
-        if (plugin.getTitleManager() != null) {
-            plugin.getTitleManager().showRtpPreparing(player);
-        }
-
         int attempts = Math.max(1, plugin.getConfig().getInt("rtp.geral.max-tentativas", 32));
         findSafeLocationAsync(player, rtpWorld, settings, attempts, safe -> {
             if (safe == null) {
@@ -128,15 +126,82 @@ public final class RtpManager implements Listener {
                 return;
             }
 
+            preloadAndTeleport(player, rtpWorld, safe, settings);
+
+        });
+    }
+
+    private void preloadAndTeleport(Player player, World world, Location safe, WorldSettings settings) {
+        UUID uuid = player.getUniqueId();
+        int seconds = Math.max(1, plugin.getConfig().getInt("rtp.geral.pre-carregar-segundos", 3));
+        int waitTicks = seconds * 20;
+
+        if (plugin.getTitleManager() != null) {
+            plugin.getTitleManager().showRtpLoading(player, waitTicks);
+        }
+
+        // Mantemos a região imediata pronta para o momento do teleporte.
+        // O alvo já foi validado e gerado; os vizinhos só são carregados se
+        // já existirem, evitando gerar várias chunks pesadas de uma vez.
+        int targetChunkX = safe.getBlockX() >> 4;
+        int targetChunkZ = safe.getBlockZ() >> 4;
+        List<int[]> tickets = new ArrayList<>();
+
+        for (int dx = -1; dx <= 1; dx++) {
+            for (int dz = -1; dz <= 1; dz++) {
+                int cx = targetChunkX + dx;
+                int cz = targetChunkZ + dz;
+                try {
+                    boolean generated = world.isChunkGenerated(cx, cz);
+                    if (!generated && (cx != targetChunkX || cz != targetChunkZ)) continue;
+                    if (!world.isChunkLoaded(cx, cz)) {
+                        world.loadChunk(cx, cz, generated);
+                    }
+                    if (world.isChunkLoaded(cx, cz) && world.addPluginChunkTicket(cx, cz, plugin)) {
+                        tickets.add(new int[]{cx, cz});
+                    }
+                } catch (Throwable throwable) {
+                    plugin.getLogger().warning("Falha ao pré-carregar chunk do RTP em " + cx + "," + cz
+                            + " no mundo " + world.getName() + ": " + throwable.getMessage());
+                }
+            }
+        }
+
+        preloadTickets.put(uuid, tickets);
+        BukkitTask oldTask = preloadTasks.remove(uuid);
+        if (oldTask != null) oldTask.cancel();
+
+        BukkitTask task = Bukkit.getScheduler().runTaskLater(plugin, () -> {
+            preloadTasks.remove(uuid);
+            if (!player.isOnline()) {
+                releasePreloadTickets(world, tickets);
+                finish(player);
+                return;
+            }
+
             player.teleport(safe);
             if (plugin.getTitleManager() != null) {
                 plugin.getTitleManager().showBiomeAfterRtp(player, safe);
             }
-            cooldowns.put(player.getUniqueId(), System.currentTimeMillis() + cooldownSeconds(settings) * 1000L);
-            heatmap.merge(rtpWorld.getName(), 1L, Long::sum);
+            cooldowns.put(uuid, System.currentTimeMillis() + cooldownSeconds(settings) * 1000L);
+            heatmap.merge(world.getName(), 1L, Long::sum);
             message(player, "teleportado", "&aTeleportado aleatoriamente para &f{id}&a.", "id", settings.id());
+
+            releasePreloadTickets(world, tickets);
+            preloadTickets.remove(uuid);
             finish(player);
-        });
+        }, waitTicks);
+
+        preloadTasks.put(uuid, task);
+    }
+
+    private void releasePreloadTickets(World world, List<int[]> tickets) {
+        for (int[] ticket : tickets) {
+            try {
+                world.removePluginChunkTicket(ticket[0], ticket[1], plugin);
+            } catch (Throwable ignored) {
+            }
+        }
     }
 
     private void finish(Player player) {
@@ -452,6 +517,16 @@ public final class RtpManager implements Listener {
         pendingWorlds.remove(uuid);
         delays.remove(uuid);
         processing.remove(uuid);
+
+        BukkitTask preloadTask = preloadTasks.remove(uuid);
+        if (preloadTask != null) preloadTask.cancel();
+
+        List<int[]> tickets = preloadTickets.remove(uuid);
+        if (tickets != null) {
+            Player player = event.getPlayer();
+            World world = player.getWorld();
+            releasePreloadTickets(world, tickets);
+        }
     }
 
     private void message(Player player, String key, String fallback, String placeholder, String value) {
