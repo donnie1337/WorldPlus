@@ -411,12 +411,11 @@ public final class RtpManager implements Listener {
     }
 
     /**
-     * Gera/carrega somente a chunk escolhida pelo RTP.
+     * Solicita a geração/carregamento da chunk escolhida pelo RTP.
      *
-     * O Spigot API não oferece geração assíncrona de chunk. Portanto esta
-     * operação é executada no thread principal, uma chunk por vez e somente
-     * quando um jogador solicita RTP. Isso substitui a antiga pré-geração
-     * contínua dos mundos.
+     * A geração é feita pelo pipeline interno assíncrono de chunks do servidor.
+     * Nunca usamos getChunk(..., true) como fallback, porque essa chamada pode
+     * gerar a chunk de forma síncrona no thread principal e travar o servidor.
      */
     private void prepareChunkAsync(World world, int chunkX, int chunkZ,
                                    java.util.function.Consumer<Boolean> callback) {
@@ -429,20 +428,9 @@ public final class RtpManager implements Listener {
             return;
         }
 
-        // Fallback somente se a ponte NMS assíncrona não estiver disponível.
-        // Em Spigot 26.2 a ponte deve ser usada normalmente; este caminho
-        // preserva funcionamento caso a implementação interna mude.
-        Bukkit.getScheduler().runTask(plugin, () -> {
-            try {
-                org.bukkit.Chunk chunk = world.getChunkAt(chunkX, chunkZ, true);
-                callback.accept(chunk != null && chunk.isGenerated());
-            } catch (Throwable throwable) {
-                plugin.getLogger().warning("Falha ao preparar chunk RTP "
-                        + chunkX + "," + chunkZ + " em " + world.getName()
-                        + ": " + throwable.getMessage());
-                callback.accept(false);
-            }
-        });
+        plugin.getLogger().warning("Pipeline assíncrono de chunks indisponível para RTP em "
+                + world.getName() + " (" + chunkX + "," + chunkZ + ").");
+        callback.accept(false);
     }
 
     private void retryCandidate(Player player, World world, WorldSettings settings, int attempts, int attempt,
