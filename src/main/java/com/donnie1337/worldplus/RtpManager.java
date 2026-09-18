@@ -133,16 +133,18 @@ public final class RtpManager implements Listener {
 
     private void findSafeLocationAsync(Player player, World world, WorldSettings settings, int attempts,
                                        java.util.function.Consumer<Location> callback) {
-        double borderRadius = world.getWorldBorder().getSize() / 2.0D - 16.0D;
-        double maxRadius = plugin.getConfig().getDouble("rtp.mundos." + settings.id() + ".raio-maximo", borderRadius);
-        double minRadius = plugin.getConfig().getDouble("rtp.mundos." + settings.id() + ".raio-minimo", 100.0D);
-        boolean useBorder = plugin.getConfig().getBoolean("rtp.mundos." + settings.id() + ".usar-borda", true);
-        double centerX = plugin.getConfig().getDouble("rtp.mundos." + settings.id() + ".centro-x", 0.0D);
-        double centerZ = plugin.getConfig().getDouble("rtp.mundos." + settings.id() + ".centro-z", 0.0D);
-        String shape = plugin.getConfig().getString("rtp.mundos." + settings.id() + ".formato", "circle");
-
-        if (useBorder) maxRadius = Math.min(maxRadius, borderRadius);
-        if (maxRadius <= minRadius) minRadius = 0;
+        // O RTP percorre a área inteira da WorldBorder, sem raio mínimo/máximo
+        // configurado. O sorteio é uniforme em X/Z dentro do quadrado da borda,
+        // mantendo uma pequena margem para evitar posições exatamente no limite.
+        org.bukkit.WorldBorder border = world.getWorldBorder();
+        Location borderCenter = border.getCenter();
+        double halfSize = Math.max(1.0D, border.getSize() / 2.0D - 16.0D);
+        double centerX = borderCenter.getX();
+        double centerZ = borderCenter.getZ();
+        boolean useBorder = true;
+        double minRadius = 0.0D;
+        double maxRadius = halfSize;
+        String shape = "square";
 
         int minY = plugin.getConfig().getInt("rtp.mundos." + settings.id() + ".y-minimo", 0);
         int maxY = plugin.getConfig().getInt("rtp.mundos." + settings.id() + ".y-maximo", 320);
