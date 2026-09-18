@@ -59,11 +59,15 @@ mundos:
     pvp: true
     manter-inventario: true
     dificuldade: "HARD"
+
 rtp:
   geral:
     atraso-segundos: 5
     cancelar-ao-mover: true
-    cooldown-segundos: 60
+    # Tempo mínimo entre usos do /rtp.
+    # 15 segundos dão tempo para o servidor concluir o processamento
+    # e a geração/carregamento das chunks antes de outro RTP.
+    cooldown-segundos: 15
     max-tentativas: 32
     blocos-bloqueados:
       - water
@@ -81,9 +85,11 @@ rtp:
       - air
       - cave_air
       - void_air
+
   gui:
     habilitado: true
     titulo: "&8&lRTP &8• &fEscolha o mundo"
+
   mundos:
     overworld:
       habilitado: true
@@ -95,7 +101,8 @@ rtp:
       formato: "circle"
       y-minimo: 0
       y-maximo: 320
-      cooldown-segundos: 60
+      cooldown-segundos: 15
+
     mineracao:
       habilitado: true
       usar-borda: true
@@ -106,7 +113,8 @@ rtp:
       formato: "circle"
       y-minimo: 0
       y-maximo: 320
-      cooldown-segundos: 30
+      cooldown-segundos: 15
+
     nether:
       habilitado: true
       usar-borda: true
@@ -117,7 +125,8 @@ rtp:
       formato: "circle"
       y-minimo: 32
       y-maximo: 120
-      cooldown-segundos: 45
+      cooldown-segundos: 15
+
     end:
       habilitado: true
       usar-borda: true
@@ -128,7 +137,7 @@ rtp:
       formato: "circle"
       y-minimo: 0
       y-maximo: 320
-      cooldown-segundos: 60
+      cooldown-segundos: 15
 
 mensagens:
   prefixo: "&7&lᴡᴏʀʟᴅᴘʟᴜs &8• &r"
