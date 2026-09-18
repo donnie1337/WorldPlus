@@ -203,5 +203,4 @@ public final class RtpPreGenerator {
         return new int[]{x, z};
     }
 
-    private int ringSideOffset;
 }
