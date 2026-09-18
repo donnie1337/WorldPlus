@@ -150,6 +150,11 @@ public final class RtpCommand implements CommandExecutor, TabCompleter, Listener
         if (settings.id().equalsIgnoreCase("mineracao") || settings.name().equalsIgnoreCase("mining")) {
             return "Mineração";
         }
+        if (settings.id().equalsIgnoreCase("end")
+                || settings.name().equalsIgnoreCase("world_the_end")
+                || settings.environment() == org.bukkit.World.Environment.THE_END) {
+            return "End";
+        }
 
         String name = settings.name();
         if (name == null || name.isBlank()) {
