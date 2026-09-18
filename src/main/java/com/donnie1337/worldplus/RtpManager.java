@@ -205,14 +205,30 @@ public final class RtpManager implements Listener {
         int chunkX = blockX >> 4;
         int chunkZ = blockZ >> 4;
 
-        // Nunca gere um chunk novo durante o RTP.
-        // getChunkAt(..., true) força geração síncrona e pode bloquear o thread principal
-        // por tempo suficiente para desconectar jogadores e travar o servidor.
-        // O RTP só analisa chunks que já foram gerados/carregados pelo servidor.
+        // Em Spigot puro não existe uma API pública de geração assíncrona de chunks.
+        // Portanto, quando o ponto sorteado ainda não existe, geramos somente UMA
+        // chunk por tick e voltamos para a busca no próximo tick. Isso evita o loop
+        // instantâneo que fazia o RTP consumir todas as tentativas em uma área ainda
+        // não explorada. A geração continua no thread principal, como exige a API,
+        // mas fica limitada a uma chunk por etapa do RTP.
         if (!world.isChunkGenerated(chunkX, chunkZ)) {
-            Bukkit.getScheduler().runTask(plugin, () ->
-                    findCandidate(player, world, settings, attempts, attempt + 1, minRadius, maxRadius,
-                            useBorder, centerX, centerZ, shape, minY, maxY, callback));
+            final int nextAttempt = attempt + 1;
+            Bukkit.getScheduler().runTask(plugin, () -> {
+                if (!player.isOnline()) {
+                    callback.accept(null);
+                    return;
+                }
+
+                try {
+                    world.getChunkAt(chunkX, chunkZ, true);
+                } catch (Throwable throwable) {
+                    plugin.getLogger().warning("Falha ao gerar chunk do RTP em " + chunkX + "," + chunkZ
+                            + " no mundo " + world.getName() + ": " + throwable.getMessage());
+                }
+
+                findCandidate(player, world, settings, attempts, nextAttempt, minRadius, maxRadius,
+                        useBorder, centerX, centerZ, shape, minY, maxY, callback);
+            });
             return;
         }
 
