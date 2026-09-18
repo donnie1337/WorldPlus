@@ -46,7 +46,17 @@ public final class WorldPlus extends JavaPlugin {
         if (getConfig().getBoolean("configuracao.criar-mundos-automaticamente", true)) {
             for (WorldSettings settings : worlds.values()) createOrLoadWorld(settings);
         }
+        RtpManager rtpManager = new RtpManager(this);
+        RtpCommand rtpCommand = new RtpCommand(this, rtpManager);
+        PluginCommand rtp = getCommand("rtp");
+        if (rtp != null) {
+            rtp.setExecutor(rtpCommand);
+            rtp.setTabCompleter(rtpCommand);
+        }
+        getServer().getPluginManager().registerEvents(rtpManager, this);
+        getServer().getPluginManager().registerEvents(rtpCommand, this);
         getLogger().info("WorldPlus: portais de Nether e End configurados.");
+        getLogger().info("WorldPlus: sistema de RTP configurado.");
         getLogger().info("WorldPlus ativado.");
     }
 
