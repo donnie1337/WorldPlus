@@ -149,7 +149,7 @@ rtp:
 titles:
   rtp-preparando:
     habilitado: true
-    titulo: "&b&lᴛᴇʟᴇᴘᴏʀᴛᴇ"
+    titulo: "&f&lᴛᴇʟᴇᴘᴏʀᴛᴇ"
     subtitulo: "&7Preparando seu destino..."
     fade-in: 10
     duracao: 40
@@ -157,151 +157,424 @@ titles:
 
   bioma:
     habilitado: true
-    titulo: ""
-    subtitulo: "&7Você está {artigo} &f{bioma}"
-    fade-in: 5
-    duracao: 40
-    fade-out: 10
-    artigo-padrao: "no"
+    # Visual inspirado na atmosfera de Hollow Knight:
+    # título limpo, subtítulo destacado, bastante espaço visual.
+    fade-in: 10
+    duracao: 50
+    fade-out: 15
+    padrao:
+      titulo: "&fVocê está {artigo}"
+      subtitulo: "&f&l{bioma}"
 
-  # Nomes personalizados dos biomas.
-  # Se um bioma não estiver listado, o WorldPlus formata
-  # automaticamente o nome técnico do Minecraft.
   biomas:
-    savanna: "Savanna"
-    desert: "Deserto"
-    plains: "Planícies"
-    forest: "Floresta"
-    jungle: "Selva"
-    bamboo_jungle: "Selva de Bambu"
-    swamp: "Pântano"
-    mangrove_swamp: "Pântano de Mangue"
-    taiga: "Taiga"
-    snowy_taiga: "Taiga Nevada"
-    snowy_plains: "Planícies Nevadas"
-    meadow: "Prado"
-    cherry_grove: "Bosque de Cerejeiras"
-    grove: "Bosque"
-    windswept_hills: "Montanhas"
-    windswept_forest: "Floresta Montanhosa"
-    windswept_gravelly_hills: "Colinas Rochosas"
-    windswept_savanna: "Savanna Montanhosa"
-    jagged_peaks: "Picos Escarpados"
-    frozen_peaks: "Picos Congelados"
-    stony_peaks: "Picos Rochosos"
-    ocean: "Oceano"
-    deep_ocean: "Oceano Profundo"
-    cold_ocean: "Oceano Frio"
-    frozen_ocean: "Oceano Congelado"
-    warm_ocean: "Oceano Quente"
-    river: "Rio"
-    frozen_river: "Rio Congelado"
-    beach: "Praia"
-    stony_shore: "Costa Rochosa"
-    badlands: "Badlands"
-    wooded_badlands: "Badlands Arborizadas"
-    eroded_badlands: "Badlands Erodidas"
-    mushroom_fields: "Campos de Cogumelos"
-    ice_spikes: "Espinhos de Gelo"
-    dark_forest: "Floresta Escura"
-    birch_forest: "Floresta de Bétulas"
-    flower_forest: "Floresta de Flores"
-    sparse_jungle: "Selva Esparsa"
-    old_growth_pine_taiga: "Taiga de Pinheiros Antigos"
-    old_growth_spruce_taiga: "Taiga de Abetos Antigos"
-    sunflower_plains: "Planícies de Girassóis"
-    deep_dark: "Escuridão Profunda"
-    dripstone_caves: "Cavernas de Dripstone"
-    lush_caves: "Cavernas Exuberantes"
-    nether_wastes: "Dunas do Nether"
-    soul_sand_valley: "Vale das Areias das Almas"
-    crimson_forest: "Floresta Carmesim"
-    warped_forest: "Floresta Distorcida"
-    basalt_deltas: "Deltas de Basalto"
-    the_end: "O End"
-    end_highlands: "Terras Altas do End"
-    end_midlands: "Terras Médias do End"
-    small_end_islands: "Pequenas Ilhas do End"
-    end_barrens: "Ermos do End"
-    deep_cold_ocean: "Oceano Profundo Frio"
-    deep_frozen_ocean: "Oceano Profundo Congelado"
-    deep_lukewarm_ocean: "Oceano Profundo Morno"
-    lukewarm_ocean: "Oceano Morno"
-    old_growth_birch_forest: "Floresta de Bétulas Antigas"
-    pale_garden: "Jardim Pálido"
-    savanna_plateau: "Planalto de Savanna"
-    snowy_beach: "Praia Nevada"
-    snowy_slopes: "Encostas Nevadas"
-    sulfur_caves: "Cavernas de Enxofre"
-    the_void: "O Vazio"
-
-  artigos:
-    savanna: "na"
-    desert: "no"
-    plains: "nas"
-    forest: "na"
-    jungle: "na"
-    bamboo_jungle: "na"
-    swamp: "no"
-    mangrove_swamp: "no"
-    taiga: "na"
-    snowy_taiga: "na"
-    snowy_plains: "nas"
-    meadow: "no"
-    cherry_grove: "no"
-    grove: "no"
-    windswept_hills: "nas"
-    windswept_forest: "na"
-    windswept_gravelly_hills: "nas"
-    windswept_savanna: "na"
-    jagged_peaks: "nos"
-    frozen_peaks: "nos"
-    stony_peaks: "nos"
-    ocean: "no"
-    deep_ocean: "no"
-    cold_ocean: "no"
-    frozen_ocean: "no"
-    warm_ocean: "no"
-    river: "no"
-    frozen_river: "no"
-    beach: "na"
-    stony_shore: "na"
-    badlands: "nas"
-    wooded_badlands: "nas"
-    eroded_badlands: "nas"
-    mushroom_fields: "nos"
-    ice_spikes: "nos"
-    dark_forest: "na"
-    birch_forest: "na"
-    flower_forest: "na"
-    sparse_jungle: "na"
-    old_growth_pine_taiga: "na"
-    old_growth_spruce_taiga: "na"
-    sunflower_plains: "nas"
-    deep_dark: "na"
-    dripstone_caves: "nas"
-    lush_caves: "nas"
-    nether_wastes: "nas"
-    soul_sand_valley: "no"
-    crimson_forest: "na"
-    warped_forest: "na"
-    basalt_deltas: "nos"
-    the_end: "no"
-    end_highlands: "nas"
-    end_midlands: "nas"
-    small_end_islands: "nas"
-    end_barrens: "nos"
-    deep_cold_ocean: "no"
-    deep_frozen_ocean: "no"
-    deep_lukewarm_ocean: "no"
-    lukewarm_ocean: "no"
-    old_growth_birch_forest: "na"
-    pale_garden: "no"
-    savanna_plateau: "no"
-    snowy_beach: "na"
-    snowy_slopes: "nas"
-    sulfur_caves: "nas"
-    the_void: "no"
+    titulo:
+      nome: "&b&lᴛᴇʟᴇᴘᴏʀᴛᴇ"
+      artigo: "no"
+    subtitulo:
+      nome: "&7Preparando seu destino..."
+      artigo: "no"
+    titulo:
+      nome: ""
+      artigo: "no"
+    subtitulo:
+      nome: "&7Você está {artigo} &f{bioma}"
+      artigo: "no"
+    savanna:
+      nome: "Savanna"
+      artigo: "na"
+    desert:
+      nome: "Deserto"
+      artigo: "no"
+    plains:
+      nome: "Planícies"
+      artigo: "nas"
+    forest:
+      nome: "Floresta"
+      artigo: "na"
+    jungle:
+      nome: "Selva"
+      artigo: "na"
+    bamboo_jungle:
+      nome: "Selva de Bambu"
+      artigo: "na"
+    swamp:
+      nome: "Pântano"
+      artigo: "no"
+    mangrove_swamp:
+      nome: "Pântano de Mangue"
+      artigo: "no"
+    taiga:
+      nome: "Taiga"
+      artigo: "na"
+    snowy_taiga:
+      nome: "Taiga Nevada"
+      artigo: "na"
+    snowy_plains:
+      nome: "Planícies Nevadas"
+      artigo: "nas"
+    meadow:
+      nome: "Prado"
+      artigo: "no"
+    cherry_grove:
+      nome: "Bosque de Cerejeiras"
+      artigo: "no"
+    grove:
+      nome: "Bosque"
+      artigo: "no"
+    windswept_hills:
+      nome: "Montanhas"
+      artigo: "nas"
+    windswept_forest:
+      nome: "Floresta Montanhosa"
+      artigo: "na"
+    windswept_gravelly_hills:
+      nome: "Colinas Rochosas"
+      artigo: "nas"
+    windswept_savanna:
+      nome: "Savanna Montanhosa"
+      artigo: "na"
+    jagged_peaks:
+      nome: "Picos Escarpados"
+      artigo: "nos"
+    frozen_peaks:
+      nome: "Picos Congelados"
+      artigo: "nos"
+    stony_peaks:
+      nome: "Picos Rochosos"
+      artigo: "nos"
+    ocean:
+      nome: "Oceano"
+      artigo: "no"
+    deep_ocean:
+      nome: "Oceano Profundo"
+      artigo: "no"
+    cold_ocean:
+      nome: "Oceano Frio"
+      artigo: "no"
+    frozen_ocean:
+      nome: "Oceano Congelado"
+      artigo: "no"
+    warm_ocean:
+      nome: "Oceano Quente"
+      artigo: "no"
+    river:
+      nome: "Rio"
+      artigo: "no"
+    frozen_river:
+      nome: "Rio Congelado"
+      artigo: "no"
+    beach:
+      nome: "Praia"
+      artigo: "na"
+    stony_shore:
+      nome: "Costa Rochosa"
+      artigo: "na"
+    badlands:
+      nome: "Badlands"
+      artigo: "nas"
+    wooded_badlands:
+      nome: "Badlands Arborizadas"
+      artigo: "nas"
+    eroded_badlands:
+      nome: "Badlands Erodidas"
+      artigo: "nas"
+    mushroom_fields:
+      nome: "Campos de Cogumelos"
+      artigo: "nos"
+    ice_spikes:
+      nome: "Espinhos de Gelo"
+      artigo: "nos"
+    dark_forest:
+      nome: "Floresta Escura"
+      artigo: "na"
+    birch_forest:
+      nome: "Floresta de Bétulas"
+      artigo: "na"
+    flower_forest:
+      nome: "Floresta de Flores"
+      artigo: "na"
+    sparse_jungle:
+      nome: "Selva Esparsa"
+      artigo: "na"
+    old_growth_pine_taiga:
+      nome: "Taiga de Pinheiros Antigos"
+      artigo: "na"
+    old_growth_spruce_taiga:
+      nome: "Taiga de Abetos Antigos"
+      artigo: "na"
+    sunflower_plains:
+      nome: "Planícies de Girassóis"
+      artigo: "nas"
+    deep_dark:
+      nome: "Escuridão Profunda"
+      artigo: "na"
+    dripstone_caves:
+      nome: "Cavernas de Dripstone"
+      artigo: "nas"
+    lush_caves:
+      nome: "Cavernas Exuberantes"
+      artigo: "nas"
+    nether_wastes:
+      nome: "Dunas do Nether"
+      artigo: "nas"
+    soul_sand_valley:
+      nome: "Vale das Areias das Almas"
+      artigo: "no"
+    crimson_forest:
+      nome: "Floresta Carmesim"
+      artigo: "na"
+    warped_forest:
+      nome: "Floresta Distorcida"
+      artigo: "na"
+    basalt_deltas:
+      nome: "Deltas de Basalto"
+      artigo: "nos"
+    the_end:
+      nome: "O End"
+      artigo: "no"
+    end_highlands:
+      nome: "Terras Altas do End"
+      artigo: "nas"
+    end_midlands:
+      nome: "Terras Médias do End"
+      artigo: "nas"
+    small_end_islands:
+      nome: "Pequenas Ilhas do End"
+      artigo: "nas"
+    end_barrens:
+      nome: "Ermos do End"
+      artigo: "nos"
+    deep_cold_ocean:
+      nome: "Oceano Profundo Frio"
+      artigo: "no"
+    deep_frozen_ocean:
+      nome: "Oceano Profundo Congelado"
+      artigo: "no"
+    deep_lukewarm_ocean:
+      nome: "Oceano Profundo Morno"
+      artigo: "no"
+    lukewarm_ocean:
+      nome: "Oceano Morno"
+      artigo: "no"
+    old_growth_birch_forest:
+      nome: "Floresta de Bétulas Antigas"
+      artigo: "na"
+    pale_garden:
+      nome: "Jardim Pálido"
+      artigo: "no"
+    savanna_plateau:
+      nome: "Planalto de Savanna"
+      artigo: "no"
+    snowy_beach:
+      nome: "Praia Nevada"
+      artigo: "na"
+    snowy_slopes:
+      nome: "Encostas Nevadas"
+      artigo: "nas"
+    sulfur_caves:
+      nome: "Cavernas de Enxofre"
+      artigo: "nas"
+    the_void:
+      nome: "O Vazio"
+      artigo: "no"
+    savanna:
+      nome: "na"
+      artigo: "na"
+    desert:
+      nome: "no"
+      artigo: "no"
+    plains:
+      nome: "nas"
+      artigo: "nas"
+    forest:
+      nome: "na"
+      artigo: "na"
+    jungle:
+      nome: "na"
+      artigo: "na"
+    bamboo_jungle:
+      nome: "na"
+      artigo: "na"
+    swamp:
+      nome: "no"
+      artigo: "no"
+    mangrove_swamp:
+      nome: "no"
+      artigo: "no"
+    taiga:
+      nome: "na"
+      artigo: "na"
+    snowy_taiga:
+      nome: "na"
+      artigo: "na"
+    snowy_plains:
+      nome: "nas"
+      artigo: "nas"
+    meadow:
+      nome: "no"
+      artigo: "no"
+    cherry_grove:
+      nome: "no"
+      artigo: "no"
+    grove:
+      nome: "no"
+      artigo: "no"
+    windswept_hills:
+      nome: "nas"
+      artigo: "nas"
+    windswept_forest:
+      nome: "na"
+      artigo: "na"
+    windswept_gravelly_hills:
+      nome: "nas"
+      artigo: "nas"
+    windswept_savanna:
+      nome: "na"
+      artigo: "na"
+    jagged_peaks:
+      nome: "nos"
+      artigo: "nos"
+    frozen_peaks:
+      nome: "nos"
+      artigo: "nos"
+    stony_peaks:
+      nome: "nos"
+      artigo: "nos"
+    ocean:
+      nome: "no"
+      artigo: "no"
+    deep_ocean:
+      nome: "no"
+      artigo: "no"
+    cold_ocean:
+      nome: "no"
+      artigo: "no"
+    frozen_ocean:
+      nome: "no"
+      artigo: "no"
+    warm_ocean:
+      nome: "no"
+      artigo: "no"
+    river:
+      nome: "no"
+      artigo: "no"
+    frozen_river:
+      nome: "no"
+      artigo: "no"
+    beach:
+      nome: "na"
+      artigo: "na"
+    stony_shore:
+      nome: "na"
+      artigo: "na"
+    badlands:
+      nome: "nas"
+      artigo: "nas"
+    wooded_badlands:
+      nome: "nas"
+      artigo: "nas"
+    eroded_badlands:
+      nome: "nas"
+      artigo: "nas"
+    mushroom_fields:
+      nome: "nos"
+      artigo: "nos"
+    ice_spikes:
+      nome: "nos"
+      artigo: "nos"
+    dark_forest:
+      nome: "na"
+      artigo: "na"
+    birch_forest:
+      nome: "na"
+      artigo: "na"
+    flower_forest:
+      nome: "na"
+      artigo: "na"
+    sparse_jungle:
+      nome: "na"
+      artigo: "na"
+    old_growth_pine_taiga:
+      nome: "na"
+      artigo: "na"
+    old_growth_spruce_taiga:
+      nome: "na"
+      artigo: "na"
+    sunflower_plains:
+      nome: "nas"
+      artigo: "nas"
+    deep_dark:
+      nome: "na"
+      artigo: "na"
+    dripstone_caves:
+      nome: "nas"
+      artigo: "nas"
+    lush_caves:
+      nome: "nas"
+      artigo: "nas"
+    nether_wastes:
+      nome: "nas"
+      artigo: "nas"
+    soul_sand_valley:
+      nome: "no"
+      artigo: "no"
+    crimson_forest:
+      nome: "na"
+      artigo: "na"
+    warped_forest:
+      nome: "na"
+      artigo: "na"
+    basalt_deltas:
+      nome: "nos"
+      artigo: "nos"
+    the_end:
+      nome: "no"
+      artigo: "no"
+    end_highlands:
+      nome: "nas"
+      artigo: "nas"
+    end_midlands:
+      nome: "nas"
+      artigo: "nas"
+    small_end_islands:
+      nome: "nas"
+      artigo: "nas"
+    end_barrens:
+      nome: "nos"
+      artigo: "nos"
+    deep_cold_ocean:
+      nome: "no"
+      artigo: "no"
+    deep_frozen_ocean:
+      nome: "no"
+      artigo: "no"
+    deep_lukewarm_ocean:
+      nome: "no"
+      artigo: "no"
+    lukewarm_ocean:
+      nome: "no"
+      artigo: "no"
+    old_growth_birch_forest:
+      nome: "na"
+      artigo: "na"
+    pale_garden:
+      nome: "no"
+      artigo: "no"
+    savanna_plateau:
+      nome: "no"
+      artigo: "no"
+    snowy_beach:
+      nome: "na"
+      artigo: "na"
+    snowy_slopes:
+      nome: "nas"
+      artigo: "nas"
+    sulfur_caves:
+      nome: "nas"
+      artigo: "nas"
+    the_void:
+      nome: "no"
+      artigo: "no"
 
 mensagens:
   prefixo: "&7&lᴡᴏʀʟᴅᴘʟᴜs &8• &r"
