@@ -92,41 +92,47 @@ public final class RtpManager implements Listener {
             return;
         }
         processing.add(player.getUniqueId());
-        Bukkit.getScheduler().runTask(plugin, () -> {
-            try {
-                perform(player, request.worldId());
-            } finally {
-                processing.remove(player.getUniqueId());
-                processNext();
-            }
-        });
+        Bukkit.getScheduler().runTask(plugin, () -> perform(player, request.worldId()));
     }
 
     private void perform(Player player, String worldId) {
         WorldSettings settings = plugin.getSettings(worldId);
-        if (settings == null) return;
+        if (settings == null) {
+            finish(player);
+            return;
+        }
 
         World world = Bukkit.getWorld(settings.name());
         if (world == null) world = plugin.createOrLoadWorld(settings);
         if (world == null) {
             message(player, "erro", "&cNão foi possível carregar o mundo de RTP.", null, null);
+            finish(player);
             return;
         }
 
         int attempts = Math.max(1, plugin.getConfig().getInt("rtp.geral.max-tentativas", 32));
-        Location safe = findSafeLocation(world, settings, attempts);
-        if (safe == null) {
-            message(player, "local-nao-encontrado", "&cNão foi possível encontrar um local seguro para o RTP.", null, null);
-            return;
-        }
+        findSafeLocationAsync(player, world, settings, attempts, safe -> {
+            if (safe == null) {
+                message(player, "local-nao-encontrado", "&cNão foi possível encontrar um local seguro para o RTP.", null, null);
+                finish(player);
+                return;
+            }
 
-        player.teleport(safe);
-        cooldowns.put(player.getUniqueId(), System.currentTimeMillis() + cooldownSeconds(settings) * 1000L);
-        heatmap.merge(world.getName(), 1L, Long::sum);
-        message(player, "teleportado", "&aTeleportado aleatoriamente para &f{id}&a.", "id", settings.id());
+            player.teleport(safe);
+            cooldowns.put(player.getUniqueId(), System.currentTimeMillis() + cooldownSeconds(settings) * 1000L);
+            heatmap.merge(world.getName(), 1L, Long::sum);
+            message(player, "teleportado", "&aTeleportado aleatoriamente para &f{id}&a.", "id", settings.id());
+            finish(player);
+        });
     }
 
-    private Location findSafeLocation(World world, WorldSettings settings, int attempts) {
+    private void finish(Player player) {
+        processing.remove(player.getUniqueId());
+        Bukkit.getScheduler().runTask(plugin, this::processNext);
+    }
+
+    private void findSafeLocationAsync(Player player, World world, WorldSettings settings, int attempts,
+                                       java.util.function.Consumer<Location> callback) {
         double borderRadius = world.getWorldBorder().getSize() / 2.0D - 16.0D;
         double maxRadius = plugin.getConfig().getDouble("rtp.mundos." + settings.id() + ".raio-maximo", borderRadius);
         double minRadius = plugin.getConfig().getDouble("rtp.mundos." + settings.id() + ".raio-minimo", 100.0D);
@@ -141,78 +147,123 @@ public final class RtpManager implements Listener {
         int minY = plugin.getConfig().getInt("rtp.mundos." + settings.id() + ".y-minimo", 0);
         int maxY = plugin.getConfig().getInt("rtp.mundos." + settings.id() + ".y-maximo", 320);
 
-        for (int attempt = 0; attempt < attempts; attempt++) {
-            double x;
-            double z;
-            if ("square".equalsIgnoreCase(shape)) {
-                x = centerX + randomBetween(-maxRadius, maxRadius);
-                z = centerZ + randomBetween(-maxRadius, maxRadius);
-                if (Math.abs(x - centerX) < minRadius && Math.abs(z - centerZ) < minRadius) continue;
-            } else {
-                double angle = ThreadLocalRandom.current().nextDouble(0, Math.PI * 2);
-                double radius = Math.sqrt(ThreadLocalRandom.current().nextDouble(
-                        minRadius * minRadius, Math.max(minRadius * minRadius + 1, maxRadius * maxRadius)));
-                x = centerX + Math.cos(angle) * radius;
-                z = centerZ + Math.sin(angle) * radius;
-            }
-
-            int blockX = (int) Math.floor(x);
-            int blockZ = (int) Math.floor(z);
-            if (useBorder && !world.getWorldBorder().isInside(new Location(world, blockX, 64, blockZ))) continue;
-
-            int y = findSafeY(world, blockX, blockZ, minY, maxY);
-            if (y < minY) continue;
-
-            Location location = new Location(world, blockX + 0.5D, y, blockZ + 0.5D);
-            if (isSafe(location)) return location;
-        }
-        return null;
+        findCandidate(player, world, settings, attempts, 0, minRadius, maxRadius, useBorder,
+                centerX, centerZ, shape, minY, maxY, callback);
     }
 
-    private int findSafeY(World world, int x, int z, int minY, int maxY) {
-        if (world.getEnvironment() == World.Environment.NETHER) {
-            for (int y = Math.min(maxY, world.getMaxHeight() - 2); y >= Math.max(minY, world.getMinHeight() + 1); y--) {
-                if (isSolid(world.getBlockAt(x, y, z)) && isAirLike(world.getBlockAt(x, y + 1, z)) && isAirLike(world.getBlockAt(x, y + 2, z)))
-                    return y + 1;
-            }
-            return Integer.MIN_VALUE;
+    private void findCandidate(Player player, World world, WorldSettings settings, int attempts, int attempt,
+                               double minRadius, double maxRadius, boolean useBorder,
+                               double centerX, double centerZ, String shape, int minY, int maxY,
+                               java.util.function.Consumer<Location> callback) {
+        if (!player.isOnline() || attempt >= attempts) {
+            callback.accept(null);
+            return;
         }
 
-        int highest = world.getHighestBlockYAt(x, z);
-        if (highest < minY || highest > maxY) return Integer.MIN_VALUE;
-        return highest + 1;
+        double x;
+        double z;
+        if ("square".equalsIgnoreCase(shape)) {
+            x = centerX + randomBetween(-maxRadius, maxRadius);
+            z = centerZ + randomBetween(-maxRadius, maxRadius);
+            if (Math.abs(x - centerX) < minRadius && Math.abs(z - centerZ) < minRadius) {
+                findCandidate(player, world, settings, attempts, attempt + 1, minRadius, maxRadius,
+                        useBorder, centerX, centerZ, shape, minY, maxY, callback);
+                return;
+            }
+        } else {
+            double angle = ThreadLocalRandom.current().nextDouble(0, Math.PI * 2);
+            double radius = Math.sqrt(ThreadLocalRandom.current().nextDouble(
+                    minRadius * minRadius,
+                    Math.max(minRadius * minRadius + 1, maxRadius * maxRadius)));
+            x = centerX + Math.cos(angle) * radius;
+            z = centerZ + Math.sin(angle) * radius;
+        }
+
+        int blockX = (int) Math.floor(x);
+        int blockZ = (int) Math.floor(z);
+        if (useBorder && !world.getWorldBorder().isInside(new Location(world, blockX, 64, blockZ))) {
+            findCandidate(player, world, settings, attempts, attempt + 1, minRadius, maxRadius,
+                    useBorder, centerX, centerZ, shape, minY, maxY, callback);
+            return;
+        }
+
+        int chunkX = blockX >> 4;
+        int chunkZ = blockZ >> 4;
+
+        // A geração é solicitada pelo pipeline assíncrono do servidor. O callback
+        // volta para a thread principal, evitando getHighestBlockYAt/getBlockAt
+        // em um chunk que ainda não foi gerado.
+        world.getChunkAtAsync(chunkX, chunkZ, true, chunk -> {
+            try {
+                org.bukkit.ChunkSnapshot snapshot = chunk.getChunkSnapshot(true, false, false);
+                int localX = blockX & 15;
+                int localZ = blockZ & 15;
+                int highest = snapshot.getHighestBlockYAt(localX, localZ);
+
+                if (highest < minY || highest > maxY) {
+                    findCandidate(player, world, settings, attempts, attempt + 1, minRadius, maxRadius,
+                            useBorder, centerX, centerZ, shape, minY, maxY, callback);
+                    return;
+                }
+
+                int y = highest + 1;
+                if (world.getEnvironment() == World.Environment.NETHER) {
+                    y = findSafeNetherY(snapshot, localX, localZ, minY, maxY);
+                    if (y == Integer.MIN_VALUE) {
+                        findCandidate(player, world, settings, attempts, attempt + 1, minRadius, maxRadius,
+                                useBorder, centerX, centerZ, shape, minY, maxY, callback);
+                        return;
+                    }
+                }
+
+                Material floor = snapshot.getBlockType(localX, y - 1, localZ);
+                Material feet = snapshot.getBlockType(localX, y, localZ);
+                Material head = snapshot.getBlockType(localX, y + 1, localZ);
+
+                if (!isSafeMaterials(floor, feet, head)) {
+                    findCandidate(player, world, settings, attempts, attempt + 1, minRadius, maxRadius,
+                            useBorder, centerX, centerZ, shape, minY, maxY, callback);
+                    return;
+                }
+
+                callback.accept(new Location(world, blockX + 0.5D, y, blockZ + 0.5D));
+            } catch (Throwable throwable) {
+                plugin.getLogger().warning("Falha ao analisar chunk do RTP em " + chunkX + "," + chunkZ
+                        + " no mundo " + world.getName() + ": " + throwable.getMessage());
+                findCandidate(player, world, settings, attempts, attempt + 1, minRadius, maxRadius,
+                        useBorder, centerX, centerZ, shape, minY, maxY, callback);
+            }
+        });
     }
 
-    private boolean isSafe(Location location) {
-        int x = location.getBlockX();
-        int y = location.getBlockY();
-        int z = location.getBlockZ();
-        World world = location.getWorld();
-        if (world == null || y <= world.getMinHeight() || y + 1 >= world.getMaxHeight()) return false;
+    private int findSafeNetherY(org.bukkit.ChunkSnapshot snapshot, int localX, int localZ, int minY, int maxY) {
+        int top = Math.min(maxY, snapshot.getHighestBlockYAt(localX, localZ));
+        for (int y = top; y >= minY + 1; y--) {
+            Material floor = snapshot.getBlockType(localX, y - 1, localZ);
+            Material feet = snapshot.getBlockType(localX, y, localZ);
+            Material head = snapshot.getBlockType(localX, y + 1, localZ);
+            if (isSolid(floor) && isAirLike(feet) && isAirLike(head) && isSafeMaterials(floor, feet, head)) {
+                return y;
+            }
+        }
+        return Integer.MIN_VALUE;
+    }
 
-        Material floor = world.getBlockAt(x, y - 1, z).getType();
-        Material feet = world.getBlockAt(x, y, z).getType();
-        Material head = world.getBlockAt(x, y + 1, z).getType();
-
+    private boolean isSafeMaterials(Material floor, Material feet, Material head) {
         List<String> blacklist = plugin.getConfig().getStringList("rtp.geral.blocos-bloqueados");
         if (blacklist.contains(floor.name().toLowerCase(Locale.ROOT))
                 || blacklist.contains(feet.name().toLowerCase(Locale.ROOT))
                 || blacklist.contains(head.name().toLowerCase(Locale.ROOT))) return false;
 
-        return isSolid(world.getBlockAt(x, y - 1, z)) && isAirLike(world.getBlockAt(x, y, z)) && isAirLike(world.getBlockAt(x, y + 1, z));
+        return isSolid(floor) && isAirLike(feet) && isAirLike(head);
     }
 
-    private boolean isSolid(org.bukkit.block.Block block) {
-        return block.getType().isSolid();
+    private boolean isSolid(Material material) {
+        return material.isSolid();
     }
 
-    private boolean isAirLike(org.bukkit.block.Block block) {
-        Material type = block.getType();
-        return type.isAir() || type == Material.WATER;
-    }
-
-    private double randomBetween(double min, double max) {
-        return ThreadLocalRandom.current().nextDouble(min, max);
+    private boolean isAirLike(Material material) {
+        return material.isAir() || material == Material.WATER;
     }
 
     private long cooldownSeconds(WorldSettings settings) {
