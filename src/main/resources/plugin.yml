@@ -1,0 +1,17 @@
+name: WorldPlus
+version: 1.0.0
+main: com.donnie1337.worldplus.WorldPlus
+api-version: '26.2'
+author: donnie1337
+description: Geração e gerenciamento configurável de mundos no Spigot.
+
+commands:
+  mundos:
+    description: Gerencia os mundos configurados do WorldPlus.
+    usage: /mundos <lista|criar|tp|recarregar>
+    permission: worldplus.admin
+
+permissions:
+  worldplus.admin:
+    description: Permite administrar os mundos do WorldPlus.
+    default: op
