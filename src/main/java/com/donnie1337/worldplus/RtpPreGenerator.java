@@ -81,12 +81,14 @@ public final class RtpPreGenerator {
             return;
         }
 
-        int maxChunk = (int) Math.ceil(getMaxRadius(settings) / 16.0D);
+        int halfSize = Math.max(1, (int) Math.ceil(settings.size() / 2.0D));
+        int minChunk = (int) Math.floor(-halfSize / 16.0D);
+        int maxChunk = (int) Math.ceil(halfSize / 16.0D) - 1;
 
         while (chunkX <= maxChunk) {
             if (chunkZ > maxChunk) {
                 chunkX++;
-                chunkZ = -maxChunk;
+                chunkZ = minChunk;
                 continue;
             }
 
@@ -94,30 +96,14 @@ public final class RtpPreGenerator {
             int currentZ = chunkZ;
             chunkZ++;
 
-            double centerX = getCenterX(settings);
-            double centerZ = getCenterZ(settings);
-            double blockX = currentX * 16.0D + 8.0D;
-            double blockZ = currentZ * 16.0D + 8.0D;
-            double distanceSquared = square(blockX - centerX) + square(blockZ - centerZ);
-            double minRadius = getMinRadius(settings);
-            double maxRadius = getMaxRadius(settings);
-
-            if (distanceSquared < minRadius * minRadius
-                    || distanceSquared > maxRadius * maxRadius) {
-                continue;
-            }
-
             totalProcessed++;
 
             try {
                 if (world.isChunkGenerated(currentX, currentZ)) {
                     totalSkipped++;
-                    world.unloadChunkRequest(currentX, currentZ);
                 } else {
                     world.getChunkAt(currentX, currentZ, true);
-                    world.unloadChunkRequest(currentX, currentZ);
                 }
-            } catch (Throwable throwable) {
                 plugin.getLogger().warning("WorldPlus: falha ao pré-gerar chunk "
                         + currentX + "," + currentZ + " em " + world.getName()
                         + ": " + throwable.getMessage());
