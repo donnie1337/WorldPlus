@@ -11,6 +11,10 @@ commands:
     usage: /mundos <lista|info|tp|spawn|setspawn|criar|excluir|recarregar>
     aliases: [mundo, worlds]
     permission: worldplus.use
+  rtp:
+    description: Teleporta o jogador para uma localização aleatória segura.
+    usage: /rtp [mundo|reload]
+    permission: worldplus.rtp.use
 
 permissions:
   worldplus.use:
@@ -18,6 +22,33 @@ permissions:
     default: true
   worldplus.teleport:
     description: Permite usar o teleporte entre mundos.
+    default: true
+  worldplus.rtp.use:
+    description: Permite usar o sistema de RTP.
+    default: true
+  worldplus.rtp.admin:
+    description: Permite recarregar a configuração do RTP.
+    default: op
+  worldplus.rtp.bypass.cooldown:
+    description: Ignora o cooldown do RTP.
+    default: op
+  worldplus.rtp.bypass.delay:
+    description: Ignora o atraso do RTP.
+    default: op
+  worldplus.rtp.world.*:
+    description: Permite usar RTP em todos os mundos configurados.
+    default: true
+  worldplus.rtp.world.overworld:
+    description: Permite RTP no overworld.
+    default: true
+  worldplus.rtp.world.mineracao:
+    description: Permite RTP no mundo de mineração.
+    default: true
+  worldplus.rtp.world.nether:
+    description: Permite RTP no Nether.
+    default: true
+  worldplus.rtp.world.end:
+    description: Permite RTP no End.
     default: true
   worldplus.admin:
     description: Permite administrar os mundos do WorldPlus.
