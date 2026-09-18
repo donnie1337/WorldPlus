@@ -24,6 +24,7 @@ import java.util.Map;
 public final class WorldPlus extends JavaPlugin {
     private final Map<String, WorldSettings> worlds = new LinkedHashMap<>();
     private TitleManager titleManager;
+    private RtpPreGenerator rtpPreGenerator;
 
     @Override
     public void onLoad() {
@@ -62,6 +63,9 @@ public final class WorldPlus extends JavaPlugin {
         getServer().getPluginManager().registerEvents(titleManager, this);
         getServer().getPluginManager().registerEvents(rtpManager, this);
         getServer().getPluginManager().registerEvents(rtpCommand, this);
+        rtpPreGenerator = new RtpPreGenerator(this);
+        rtpPreGenerator.start();
+        getLogger().info("WorldPlus: pré-geração progressiva dos mundos iniciada.");
         getLogger().info("WorldPlus: portais de Nether e End configurados.");
         getLogger().info("WorldPlus: sistema de RTP configurado.");
         getLogger().info("WorldPlus ativado.");
@@ -117,6 +121,10 @@ public final class WorldPlus extends JavaPlugin {
 
     public TitleManager getTitleManager() {
         return titleManager;
+    }
+
+    public RtpPreGenerator getRtpPreGenerator() {
+        return rtpPreGenerator;
     }
 
     public World getDimensionWorld(String id, World.Environment environment) {
