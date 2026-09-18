@@ -417,57 +417,34 @@ public final class RtpManager implements Listener {
             return;
         }
 
-        // A chamada ao pipeline NMS também não pode ficar no thread principal.
-        // Em mundos ainda não explorados, getChunkFuture pode esperar por trabalho
-        // de chunk antes mesmo de devolver a Future. BetterRTP evita esse bloqueio
-        // através de uma camada de carregamento assíncrono; aqui fazemos a mesma
-        // separação sem depender de Paper.
-        Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
+        /*
+         * Em Spigot puro, não podemos chamar o pipeline interno de chunks a partir
+         * de uma thread assíncrona. O sistema de chunks do servidor toca em estado
+         * interno que precisa permanecer no thread principal. A tentativa anterior
+         * de executar getChunkFuture() em async fazia o RTP não concluir e podia
+         * deixar o servidor preso.
+         *
+         * Aqui seguimos o modelo de fila: uma única chunk por vez, no thread do
+         * servidor, sem 3x3, sem varredura global e sem chamadas NMS assíncronas.
+         * O atraso de 3 segundos continua independente dessa preparação.
+         */
+        Bukkit.getScheduler().runTask(plugin, () -> {
             try {
-                Object craftWorld = world;
-                java.lang.reflect.Method getHandle = craftWorld.getClass().getMethod("getHandle");
-                Object serverLevel = getHandle.invoke(craftWorld);
-
-                java.lang.reflect.Method getChunkSource = serverLevel.getClass().getMethod("getChunkSource");
-                Object chunkSource = getChunkSource.invoke(serverLevel);
-
-                Class<?> chunkStatusClass;
-                try {
-                    chunkStatusClass = Class.forName("net.minecraft.world.level.chunk.status.ChunkStatus");
-                } catch (ClassNotFoundException ignored) {
-                    chunkStatusClass = Class.forName("net.minecraft.world.level.chunk.ChunkStatus");
+                if (world.isChunkLoaded(chunkX, chunkZ)) {
+                    callback.accept(true);
+                    return;
                 }
 
-                Object fullStatus = chunkStatusClass.getField("FULL").get(null);
-                java.lang.reflect.Method getChunkFuture = chunkSource.getClass().getMethod(
-                        "getChunkFuture", int.class, int.class, chunkStatusClass, boolean.class);
+                org.bukkit.Chunk chunk = world.getChunkAt(chunkX, chunkZ, true);
+                boolean generated = chunk != null
+                        && world.isChunkGenerated(chunkX, chunkZ);
 
-                Object futureObject = getChunkFuture.invoke(
-                        chunkSource, chunkX, chunkZ, fullStatus, true);
-
-                if (!(futureObject instanceof java.util.concurrent.CompletableFuture<?> future)) {
-                    throw new IllegalStateException("O pipeline de chunks não retornou CompletableFuture.");
-                }
-
-                future.whenComplete((result, throwable) ->
-                        Bukkit.getScheduler().runTask(plugin, () -> {
-                            if (throwable != null) {
-                                plugin.getLogger().warning("Falha assíncrona ao preparar chunk "
-                                        + chunkX + "," + chunkZ + " em " + world.getName()
-                                        + ": " + throwable.getMessage());
-                                callback.accept(false);
-                                return;
-                            }
-
-                            callback.accept(world.isChunkGenerated(chunkX, chunkZ));
-                        }));
+                callback.accept(generated);
             } catch (Throwable throwable) {
-                Bukkit.getScheduler().runTask(plugin, () -> {
-                    plugin.getLogger().warning("Não foi possível iniciar o carregamento assíncrono da chunk "
-                            + chunkX + "," + chunkZ + " em " + world.getName()
-                            + ": " + throwable.getMessage());
-                    callback.accept(false);
-                });
+                plugin.getLogger().warning("Falha ao preparar chunk "
+                        + chunkX + "," + chunkZ + " em " + world.getName()
+                        + ": " + throwable.getMessage());
+                callback.accept(false);
             }
         });
     }
