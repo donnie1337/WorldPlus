@@ -224,17 +224,9 @@ public final class RtpManager implements Listener {
                 // A preparação assíncrona já deixou a chunk FULL. Não usamos
                 // loadChunk aqui: essa chamada pode gerar a chunk de forma
                 // síncrona e travar o thread principal.
-                if (!world.isChunkLoaded(chunkX, chunkZ)) {
-                    prepareChunkAsync(world, chunkX, chunkZ, ready -> {
-                        if (!ready) {
-                            retryTeleport(player, settings, location, world, attempt);
-                            return;
-                        }
-                        teleportAttempt(player, settings, location, world, attempt);
-                    });
-                    return;
-                }
-
+                // A chunk usada pelo RTP já foi pré-gerada. Não forçamos
+                // geração/carregamento síncrono aqui: o próprio teleporte
+                // solicita a chunk já existente ao pipeline do servidor.
                 boolean accepted = player.teleport(
                         location,
                         org.bukkit.event.player.PlayerTeleportEvent.TeleportCause.PLUGIN
@@ -297,6 +289,9 @@ public final class RtpManager implements Listener {
                 pendingWorlds.remove(uuid);
                 pendingLocations.remove(uuid);
                 delayExpired.remove(uuid);
+                if (plugin.getTitleManager() != null) {
+                    plugin.getTitleManager().endRtpTitle(player);
+                }
                 message(player, "local-nao-encontrado",
                         "&cNão foi possível concluir o teleporte para o local preparado.", null, null);
                 finish(player);
@@ -312,6 +307,10 @@ public final class RtpManager implements Listener {
         pendingLocations.remove(uuid);
         delayExpired.remove(uuid);
         delays.remove(uuid);
+
+        if (plugin.getTitleManager() != null) {
+            plugin.getTitleManager().endRtpTitle(player);
+        }
 
         if (plugin.getTitleManager() != null) {
             plugin.getTitleManager().showBiomeAfterRtp(player, location);
@@ -350,14 +349,45 @@ public final class RtpManager implements Listener {
         int minY = plugin.getConfig().getInt("rtp.mundos." + settings.id() + ".y-minimo", 0);
         int maxY = plugin.getConfig().getInt("rtp.mundos." + settings.id() + ".y-maximo", 320);
 
+        // O RTP nunca procura no mapa inteiro enquanto a pré-geração ainda
+        // está avançando. O limite de busca acompanha a área que já foi
+        // efetivamente gerada, mantendo o teleporte aleatório e evitando
+        // escolher 32 vezes chunks que ainda não existem.
+        int generatedRadius = plugin.getRtpPreGenerator() == null
+                ? 0
+                : plugin.getRtpPreGenerator().getGeneratedRadius(settings.id());
+
+        if (generatedRadius < minRadius) {
+            if (plugin.getRtpPreGenerator() != null
+                    && plugin.getRtpPreGenerator().isGenerating(settings.id())) {
+                Bukkit.getScheduler().runTaskLater(plugin,
+                        () -> findSafeLocationAsync(player, world, settings, attempts, callback), 5L);
+                return;
+            }
+            callback.accept(null);
+            return;
+        }
+
+        int availableMaxRadius = Math.min(maxRadius, generatedRadius);
         findCandidate(player, world, settings, attempts, 0, centerX, centerZ,
-                minRadius, maxRadius, minY, maxY, callback);
+                minRadius, availableMaxRadius, minY, maxY, callback);
     }
 
     private void findCandidate(Player player, World world, WorldSettings settings, int attempts, int attempt,
                                double centerX, double centerZ, int minRadius, int maxRadius,
                                int minY, int maxY, java.util.function.Consumer<Location> callback) {
-        if (!player.isOnline() || attempt >= attempts) {
+        if (!player.isOnline()) {
+            callback.accept(null);
+            return;
+        }
+
+        if (attempt >= attempts) {
+            if (plugin.getRtpPreGenerator() != null
+                    && plugin.getRtpPreGenerator().isGenerating(settings.id())) {
+                Bukkit.getScheduler().runTaskLater(plugin,
+                        () -> findSafeLocationAsync(player, world, settings, attempts, callback), 2L);
+                return;
+            }
             callback.accept(null);
             return;
         }
@@ -384,12 +414,11 @@ public final class RtpManager implements Listener {
         }
 
         if (!world.isChunkGenerated(chunkX, chunkZ)) {
-            // A pré-geração trabalha do centro para fora. Enquanto ela avança,
-            // o RTP usa qualquer chunk já gerada dentro do raio configurado.
-            // Não geramos terreno durante o comando.
+            // Isso só pode ocorrer em uma borda ainda não alcançada pela
+            // pré-geração. Não geramos a chunk durante o RTP; reiniciamos
+            // a busca usando somente a área que já foi concluída.
             Bukkit.getScheduler().runTaskLater(plugin,
-                    () -> findCandidate(player, world, settings, attempts, attempt + 1,
-                            centerX, centerZ, minRadius, maxRadius, minY, maxY, callback), 1L);
+                    () -> findSafeLocationAsync(player, world, settings, attempts, callback), 2L);
             return;
         }
 
@@ -400,8 +429,7 @@ public final class RtpManager implements Listener {
         }
 
         Bukkit.getScheduler().runTaskLater(plugin,
-                () -> findCandidate(player, world, settings, attempts, attempt + 1,
-                        centerX, centerZ, minRadius, maxRadius, minY, maxY, callback), 1L);
+                () -> findSafeLocationAsync(player, world, settings, attempts, callback), 1L);
     }
 
     private void retryTeleport(Player player, WorldSettings settings, Location location, World world, int attempt) {
