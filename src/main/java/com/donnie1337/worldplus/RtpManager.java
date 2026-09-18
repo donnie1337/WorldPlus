@@ -356,45 +356,67 @@ public final class RtpManager implements Listener {
             return;
         }
 
-        double x = centerX + randomBetween(-halfSize, halfSize);
-        double z = centerZ + randomBetween(-halfSize, halfSize);
+        /*
+         * RTP não pode depender da geração de uma chunk aleatória no momento do
+         * comando. Em Spigot puro, uma chunk ainda não gerada pode bloquear o
+         * thread principal; a API oficial confirma que getChunkAt/loadChunk com
+         * generate=true gera a chunk. BetterRTP também usa fila/preparação de
+         * destinos para não fazer esse trabalho em rajadas.
+         *
+         * Primeiro usamos somente chunks que já existem. Assim o /rtp conclui
+         * imediatamente sem congelar o servidor. A seleção continua aleatória
+         * entre as chunks já geradas.
+         */
+        List<org.bukkit.Chunk> loaded = new ArrayList<>(Arrays.asList(world.getLoadedChunks()));
+        Collections.shuffle(loaded, ThreadLocalRandom.current());
 
-        int blockX = (int) Math.floor(x);
-        int blockZ = (int) Math.floor(z);
-        if (!world.getWorldBorder().isInside(new Location(world, blockX, 64, blockZ))) {
-            retryCandidate(player, world, settings, attempts, attempt, centerX, centerZ, halfSize, minY, maxY, callback);
-            return;
-        }
+        for (org.bukkit.Chunk chunk : loaded) {
+            if (!world.getWorldBorder().isInside(chunk.getBlock(8, 64, 8).getLocation())) continue;
 
-        int chunkX = blockX >> 4;
-        int chunkZ = blockZ >> 4;
-
-        // Nunca geramos uma chunk nova de forma síncrona. Em Spigot puro,
-        // loadChunk(..., true) pode executar a geração inteira no thread principal.
-        // Pedimos ao próprio sistema de chunks do Minecraft uma future FULL e
-        // continuamos somente quando a geração/carregamento terminar.
-        prepareChunkAsync(world, chunkX, chunkZ, ready -> {
-            if (!ready) {
-                retryCandidate(player, world, settings, attempts, attempt,
-                        centerX, centerZ, halfSize, minY, maxY, callback);
+            Location safe = analyzeChunkForSurface(world, chunk.getX(), chunk.getZ(), minY, maxY);
+            if (safe != null) {
+                callback.accept(safe);
                 return;
             }
+        }
 
-            try {
-                Location safe = analyzeChunkForSurface(world, chunkX, chunkZ, minY, maxY);
-                if (safe != null) {
-                    callback.accept(safe);
-                    return;
-                }
-            } catch (Throwable throwable) {
-                plugin.getLogger().warning("Falha ao analisar a única chunk do RTP em "
-                        + chunkX + "," + chunkZ + " no mundo " + world.getName()
-                        + ": " + throwable.getMessage());
+        // Se a área carregada não tiver um ponto seguro, procura aleatoriamente
+        // somente entre chunks que já foram geradas e estão salvas no mundo.
+        for (int i = 0; i < Math.min(16, attempts); i++) {
+            double x = centerX + randomBetween(-halfSize, halfSize);
+            double z = centerZ + randomBetween(-halfSize, halfSize);
+            int chunkX = ((int) Math.floor(x)) >> 4;
+            int chunkZ = ((int) Math.floor(z)) >> 4;
+
+            Location probe = new Location(world, chunkX * 16 + 8.0D, 64.0D, chunkZ * 16 + 8.0D);
+            if (!world.getWorldBorder().isInside(probe)) continue;
+            if (!world.isChunkGenerated(chunkX, chunkZ)) continue;
+
+            Location safe = analyzeChunkForSurface(world, chunkX, chunkZ, minY, maxY);
+            if (safe != null) {
+                callback.accept(safe);
+                return;
             }
+        }
 
-            retryCandidate(player, world, settings, attempts, attempt,
-                    centerX, centerZ, halfSize, minY, maxY, callback);
-        });
+        // Mundo recém-criado: o chunk do spawn é o último fallback seguro.
+        Location spawn = world.getSpawnLocation();
+        int spawnChunkX = spawn.getBlockX() >> 4;
+        int spawnChunkZ = spawn.getBlockZ() >> 4;
+        if (world.isChunkGenerated(spawnChunkX, spawnChunkZ)) {
+            Location safe = analyzeChunkForSurface(world, spawnChunkX, spawnChunkZ, minY, maxY);
+            if (safe != null) {
+                callback.accept(safe);
+                return;
+            }
+        }
+
+        // Nenhuma chunk já gerada possui superfície válida. Não iniciamos geração
+        // síncrona como tentativa final: isso era exatamente o que estava causando
+        // o congelamento observado no servidor.
+        Bukkit.getScheduler().runTaskLater(plugin,
+                () -> findCandidate(player, world, settings, attempts, attempt + 1,
+                        centerX, centerZ, halfSize, minY, maxY, callback), 2L);
     }
 
     private void retryTeleport(Player player, WorldSettings settings, Location location, World world, int attempt) {
@@ -417,31 +439,19 @@ public final class RtpManager implements Listener {
             return;
         }
 
-        /*
-         * Em Spigot puro, não podemos chamar o pipeline interno de chunks a partir
-         * de uma thread assíncrona. O sistema de chunks do servidor toca em estado
-         * interno que precisa permanecer no thread principal. A tentativa anterior
-         * de executar getChunkFuture() em async fazia o RTP não concluir e podia
-         * deixar o servidor preso.
-         *
-         * Aqui seguimos o modelo de fila: uma única chunk por vez, no thread do
-         * servidor, sem 3x3, sem varredura global e sem chamadas NMS assíncronas.
-         * O atraso de 3 segundos continua independente dessa preparação.
-         */
+        // Somente carrega do disco uma chunk que já foi gerada. Nunca geramos
+        // uma chunk nova durante o teleporte.
         Bukkit.getScheduler().runTask(plugin, () -> {
             try {
-                if (world.isChunkLoaded(chunkX, chunkZ)) {
-                    callback.accept(true);
+                if (!world.isChunkGenerated(chunkX, chunkZ)) {
+                    callback.accept(false);
                     return;
                 }
 
-                org.bukkit.Chunk chunk = world.getChunkAt(chunkX, chunkZ, true);
-                boolean generated = chunk != null
-                        && world.isChunkGenerated(chunkX, chunkZ);
-
-                callback.accept(generated);
+                org.bukkit.Chunk chunk = world.getChunkAt(chunkX, chunkZ, false);
+                callback.accept(chunk != null && world.isChunkLoaded(chunkX, chunkZ));
             } catch (Throwable throwable) {
-                plugin.getLogger().warning("Falha ao preparar chunk "
+                plugin.getLogger().warning("Falha ao carregar chunk RTP "
                         + chunkX + "," + chunkZ + " em " + world.getName()
                         + ": " + throwable.getMessage());
                 callback.accept(false);
