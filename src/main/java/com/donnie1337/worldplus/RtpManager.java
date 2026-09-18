@@ -189,7 +189,16 @@ public final class RtpManager implements Listener {
                 callback.accept(null);
                 return;
             }
-            inspectLoadedChunk(player, world, settings, maxAttempts, attempt, chunk, callback);
+
+            // O carregamento pode terminar fora da thread principal.
+            // A leitura dos blocos e a preparação do teleporte ficam na thread do servidor.
+            Bukkit.getScheduler().runTask(plugin, () -> {
+                if (!player.isOnline()) {
+                    callback.accept(null);
+                    return;
+                }
+                inspectLoadedChunk(player, world, settings, maxAttempts, attempt, chunk, callback);
+            });
         });
     }
 
