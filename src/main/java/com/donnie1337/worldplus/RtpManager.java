@@ -60,15 +60,17 @@ public final class RtpManager implements Listener {
         int delay = plugin.getConfig().getInt("rtp.geral.atraso-segundos", 5);
         boolean cancelOnMove = plugin.getConfig().getBoolean("rtp.geral.cancelar-ao-mover", true);
 
-        int titleWaitTicks = Math.max(1, (delay + Math.max(1, plugin.getConfig().getInt("rtp.geral.pre-carregar-segundos", 3))) * 20);
-        if (plugin.getTitleManager() != null) {
-            plugin.getTitleManager().showRtpLoading(player, titleWaitTicks);
-        }
-
+        // O atraso é o único período de espera do RTP. Durante esses segundos,
+        // a coordenada já é sorteada e a única chunk do candidato é preparada.
+        // Quando o contador termina, o jogador não espera mais nada: se a chunk
+        // estiver pronta e a posição for segura, ele é teleportado imediatamente.
         if (delay > 0 && !player.hasPermission("worldplus.rtp.bypass.delay")) {
             pendingWorlds.put(player.getUniqueId(), settings.id());
             delays.put(player.getUniqueId(), System.currentTimeMillis() + delay * 1000L);
-            // O RTP usa somente title/subtitle durante o processo; não envia mensagem ao chat.
+            if (plugin.getTitleManager() != null) {
+                plugin.getTitleManager().showRtpLoading(player, delay * 20);
+            }
+
             Bukkit.getScheduler().runTaskLater(plugin, () -> {
                 String pending = pendingWorlds.remove(player.getUniqueId());
                 delays.remove(player.getUniqueId());
