@@ -81,7 +81,7 @@ public final class RtpCommand implements CommandExecutor, TabCompleter, Listener
                         color("&7Mundo: &f" + displayWorldName(settings)),
                         color("&7Raio de exploração: &b" + raio + " blocos"),
                         color("&8"),
-                        color("&a&lClique para teleportar"),
+                        color("&a&lClique para teleportar")
                 ));
                 item.setItemMeta(meta);
             }
