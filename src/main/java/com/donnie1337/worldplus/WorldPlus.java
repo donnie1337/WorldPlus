@@ -2,6 +2,7 @@ package com.donnie1337.worldplus;
 
 import org.bukkit.Bukkit;
 import org.bukkit.Difficulty;
+import org.bukkit.GameRule;
 import org.bukkit.World;
 import org.bukkit.WorldCreator;
 import org.bukkit.WorldBorder;
@@ -125,7 +126,7 @@ public final class WorldPlus extends JavaPlugin {
         if (settings.customSpawn()) {
             world.setSpawnLocation(settings.spawnX(), settings.spawnY(), settings.spawnZ(), settings.spawnYaw());
         }
-        world.setGameRuleValue("keepInventory", Boolean.toString(settings.keepInventory()));
+        world.setGameRule(GameRule.KEEP_INVENTORY, settings.keepInventory());
     }
 
     public void setSpawn(WorldSettings settings, World world, org.bukkit.Location location) {
