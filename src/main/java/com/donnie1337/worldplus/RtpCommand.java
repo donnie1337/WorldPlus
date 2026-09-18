@@ -147,6 +147,9 @@ public final class RtpCommand implements CommandExecutor, TabCompleter, Listener
         if (settings.id().equalsIgnoreCase("overworld") || settings.name().equalsIgnoreCase("world")) {
             return "Overworld";
         }
+        if (settings.id().equalsIgnoreCase("mineracao") || settings.name().equalsIgnoreCase("mining")) {
+            return "Mineração";
+        }
 
         String name = settings.name();
         if (name == null || name.isBlank()) {
