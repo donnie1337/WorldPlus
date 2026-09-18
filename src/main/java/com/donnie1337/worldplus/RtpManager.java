@@ -214,11 +214,15 @@ public final class RtpManager implements Listener {
 
     private Location findSafeColumn(World world, Chunk chunk) {
         ThreadLocalRandom random = ThreadLocalRandom.current();
-        int start = random.nextInt(256);
         boolean nether = world.getEnvironment() == World.Environment.NETHER;
 
-        for (int offset = 0; offset < 256; offset++) {
-            int index = (start + offset) & 255;
+        // Limita a procura a uma quantidade pequena de colunas para evitar
+        // milhares de chamadas à API durante o RTP.
+        int columnsToCheck = nether ? 48 : 64;
+        int start = random.nextInt(256);
+
+        for (int offset = 0; offset < columnsToCheck; offset++) {
+            int index = (start + offset * 4) & 255;
             int localX = index & 15;
             int localZ = index >> 4;
 
@@ -226,24 +230,25 @@ public final class RtpManager implements Listener {
             int z = (chunk.getZ() << 4) + localZ;
 
             if (nether) {
-                // No Nether, nunca usa a camada de bedrock do teto como referência.
-                // Procura de cima para baixo somente abaixo do teto, até encontrar
-                // uma coluna com chão sólido e dois blocos de espaço.
-                int maxY = Math.min(world.getMaxHeight() - 2, 126);
-                int minY = world.getMinHeight() + 1;
+                // No Nether, começa abaixo do teto de bedrock e desce apenas
+                // o necessário para encontrar uma coluna realmente segura.
+                int maxY = Math.min(world.getMaxHeight() - 3, 125);
+                int minY = Math.max(world.getMinHeight(), 1);
 
                 for (int y = maxY; y >= minY; y--) {
                     Material floor = world.getBlockAt(x, y, z).getType();
-                    Material feet = world.getBlockAt(x, y + 1, z).getType();
-                    Material head = world.getBlockAt(x, y + 2, z).getType();
-
-                    if (floor == Material.BEDROCK || feet == Material.BEDROCK || head == Material.BEDROCK) {
+                    if (floor == Material.BEDROCK || isLiquid(floor) || !floor.isSolid()) {
                         continue;
                     }
 
-                    if (isLiquid(floor) || isLiquid(feet) || isLiquid(head)) continue;
-                    if (!floor.isSolid()) continue;
-                    if (!feet.isAir() || !head.isAir()) continue;
+                    Material feet = world.getBlockAt(x, y + 1, z).getType();
+                    Material head = world.getBlockAt(x, y + 2, z).getType();
+
+                    if (floor == Material.BEDROCK
+                            || isLiquid(feet) || isLiquid(head)
+                            || !feet.isAir() || !head.isAir()) {
+                        continue;
+                    }
 
                     return new Location(world, x + 0.5D, y + 1.0D, z + 0.5D);
                 }
@@ -258,9 +263,7 @@ public final class RtpManager implements Listener {
             Material feet = world.getBlockAt(x, y + 1, z).getType();
             Material head = world.getBlockAt(x, y + 2, z).getType();
 
-            // O RTP nunca coloca o jogador sobre água ou lava.
             if (isLiquid(floor) || isLiquid(feet) || isLiquid(head)) continue;
-
             if (!floor.isSolid()) continue;
             if (!feet.isAir() || !head.isAir()) continue;
 
