@@ -42,6 +42,32 @@ public final class RtpPreGenerator {
         return false;
     }
 
+    public boolean isGenerating(String worldId) {
+        if (worldId == null || worldIndex >= worlds.size()) return false;
+        return true;
+    }
+
+    /**
+     * Retorna o raio aproximado, em blocos, da área que já foi totalmente
+     * coberta pela pré-geração a partir do centro.
+     */
+    public int getGeneratedRadius(String worldId) {
+        if (worldId == null) return 0;
+        for (WorldSettings settings : worlds) {
+            if (!settings.id().equalsIgnoreCase(worldId)) continue;
+            if (worldIndex >= worlds.size()) {
+                return (int) Math.ceil(settings.size() / 2.0D);
+            }
+            WorldSettings current = worlds.get(Math.min(worldIndex, worlds.size() - 1));
+            if (!current.id().equalsIgnoreCase(worldId)) {
+                int index = worlds.indexOf(settings);
+                return index < worldIndex ? (int) Math.ceil(settings.size() / 2.0D) : 0;
+            }
+            return Math.max(0, (ring - 1) * 16);
+        }
+        return 0;
+    }
+
     private void prepareWorld() {
         if (worldIndex >= worlds.size()) return;
 
