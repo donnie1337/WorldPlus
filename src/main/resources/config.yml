@@ -53,6 +53,9 @@ mundos:
     tamanho: 7000
     estruturas: true
     remover-strongholds: false
+    remover-dragao: true
+    remover-torres: true
+    remover-bedrock: true
     pvp: true
     manter-inventario: true
     dificuldade: "HARD"
