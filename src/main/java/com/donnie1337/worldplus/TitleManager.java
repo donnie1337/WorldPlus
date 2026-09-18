@@ -57,14 +57,31 @@ public final class TitleManager implements Listener {
     }
 
     private void sendBiomeTitle(Player player, Biome biome) {
+        String biomeKey = biome.getKey().getKey();
         String biomeName = displayName(biome);
         String article = article(biome);
-        String title = "";
-        String subtitle = plugin.getConfig().getString("titles.bioma.subtitulo",
-                "&7Você está {artigo} &f{bioma}");
+
+        String title = plugin.getConfig().getString(
+                "titles.bioma.padrao.titulo",
+                "&fVocê está {artigo}");
+        String subtitle = plugin.getConfig().getString(
+                "titles.bioma.padrao.subtitulo",
+                "&f&l{bioma}");
+
+        String customTitle = plugin.getConfig().getString(
+                "titles.biomas." + biomeKey + ".titulo");
+        String customSubtitle = plugin.getConfig().getString(
+                "titles.biomas." + biomeKey + ".subtitulo");
+
+        if (customTitle != null && !customTitle.isBlank()) {
+            title = customTitle;
+        }
+        if (customSubtitle != null && !customSubtitle.isBlank()) {
+            subtitle = customSubtitle;
+        }
 
         sendTitle(player,
-                title,
+                title.replace("{bioma}", biomeName).replace("{artigo}", article),
                 subtitle.replace("{bioma}", biomeName).replace("{artigo}", article),
                 "titles.bioma");
     }
