@@ -63,7 +63,7 @@ mundos:
 rtp:
   geral:
     atraso-segundos: 5
-    cancelar-ao-mover: true
+    cancelar-ao-mover: false
     # Tempo mínimo entre usos do /rtp.
     # 15 segundos dão tempo para o servidor concluir o processamento
     # e a geração/carregamento das chunks antes de outro RTP.
