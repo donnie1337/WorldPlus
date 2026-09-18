@@ -133,7 +133,7 @@ public final class WorldPlus extends JavaPlugin {
         WorldCreator creator = new WorldCreator(settings.name())
                 .environment(settings.environment())
                 .seed(settings.seed())
-                .generateStructures(settings.structures());
+                .generateStructures(settings.environment() == World.Environment.THE_END ? false : settings.structures());
         World world = creator.createWorld();
         if (world != null) {
             applySettings(world, settings);
