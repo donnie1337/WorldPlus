@@ -157,424 +157,274 @@ titles:
 
   bioma:
     habilitado: true
-    # Visual inspirado na atmosfera de Hollow Knight:
-    # título limpo, subtítulo destacado, bastante espaço visual.
     fade-in: 10
     duracao: 50
     fade-out: 15
-    padrao:
-      titulo: "&fVocê está {artigo}"
-      subtitulo: "&f&l{bioma}"
-
-  biomas:
-    titulo:
-      nome: "&b&lᴛᴇʟᴇᴘᴏʀᴛᴇ"
-      artigo: "no"
-    subtitulo:
-      nome: "&7Preparando seu destino..."
-      artigo: "no"
-    titulo:
-      nome: ""
-      artigo: "no"
-    subtitulo:
-      nome: "&7Você está {artigo} &f{bioma}"
-      artigo: "no"
+    mensagem-padrao: "&fVocê está {artigo} {bioma}"
     savanna:
-      nome: "Savanna"
-      artigo: "na"
+      mensagem: "&fVocê está na &fSavanna"
     desert:
-      nome: "Deserto"
-      artigo: "no"
+      mensagem: "&fVocê está no &fDeserto"
     plains:
-      nome: "Planícies"
-      artigo: "nas"
+      mensagem: "&fVocê está nas &fPlanícies"
     forest:
-      nome: "Floresta"
-      artigo: "na"
+      mensagem: "&fVocê está na &fFloresta"
     jungle:
-      nome: "Selva"
-      artigo: "na"
+      mensagem: "&fVocê está na &fSelva"
     bamboo_jungle:
-      nome: "Selva de Bambu"
-      artigo: "na"
+      mensagem: "&fVocê está na &fSelva de Bambu"
     swamp:
-      nome: "Pântano"
-      artigo: "no"
+      mensagem: "&fVocê está no &fPântano"
     mangrove_swamp:
-      nome: "Pântano de Mangue"
-      artigo: "no"
+      mensagem: "&fVocê está no &fPântano de Mangue"
     taiga:
-      nome: "Taiga"
-      artigo: "na"
+      mensagem: "&fVocê está na &fTaiga"
     snowy_taiga:
-      nome: "Taiga Nevada"
-      artigo: "na"
+      mensagem: "&fVocê está na &fTaiga Nevada"
     snowy_plains:
-      nome: "Planícies Nevadas"
-      artigo: "nas"
+      mensagem: "&fVocê está nas &fPlanícies Nevadas"
     meadow:
-      nome: "Prado"
-      artigo: "no"
+      mensagem: "&fVocê está no &fPrado"
     cherry_grove:
-      nome: "Bosque de Cerejeiras"
-      artigo: "no"
+      mensagem: "&fVocê está no &fBosque de Cerejeiras"
     grove:
-      nome: "Bosque"
-      artigo: "no"
+      mensagem: "&fVocê está no &fBosque"
     windswept_hills:
-      nome: "Montanhas"
-      artigo: "nas"
+      mensagem: "&fVocê está nas &fMontanhas"
     windswept_forest:
-      nome: "Floresta Montanhosa"
-      artigo: "na"
+      mensagem: "&fVocê está na &fFloresta Montanhosa"
     windswept_gravelly_hills:
-      nome: "Colinas Rochosas"
-      artigo: "nas"
+      mensagem: "&fVocê está nas &fColinas Rochosas"
     windswept_savanna:
-      nome: "Savanna Montanhosa"
-      artigo: "na"
+      mensagem: "&fVocê está na &fSavanna Montanhosa"
     jagged_peaks:
-      nome: "Picos Escarpados"
-      artigo: "nos"
+      mensagem: "&fVocê está nos &fPicos Escarpados"
     frozen_peaks:
-      nome: "Picos Congelados"
-      artigo: "nos"
+      mensagem: "&fVocê está nos &fPicos Congelados"
     stony_peaks:
-      nome: "Picos Rochosos"
-      artigo: "nos"
+      mensagem: "&fVocê está nos &fPicos Rochosos"
     ocean:
-      nome: "Oceano"
-      artigo: "no"
+      mensagem: "&fVocê está no &fOceano"
     deep_ocean:
-      nome: "Oceano Profundo"
-      artigo: "no"
+      mensagem: "&fVocê está no &fOceano Profundo"
     cold_ocean:
-      nome: "Oceano Frio"
-      artigo: "no"
+      mensagem: "&fVocê está no &fOceano Frio"
     frozen_ocean:
-      nome: "Oceano Congelado"
-      artigo: "no"
+      mensagem: "&fVocê está no &fOceano Congelado"
     warm_ocean:
-      nome: "Oceano Quente"
-      artigo: "no"
+      mensagem: "&fVocê está no &fOceano Quente"
     river:
-      nome: "Rio"
-      artigo: "no"
+      mensagem: "&fVocê está no &fRio"
     frozen_river:
-      nome: "Rio Congelado"
-      artigo: "no"
+      mensagem: "&fVocê está no &fRio Congelado"
     beach:
-      nome: "Praia"
-      artigo: "na"
+      mensagem: "&fVocê está na &fPraia"
     stony_shore:
-      nome: "Costa Rochosa"
-      artigo: "na"
+      mensagem: "&fVocê está na &fCosta Rochosa"
     badlands:
-      nome: "Badlands"
-      artigo: "nas"
+      mensagem: "&fVocê está nas &fBadlands"
     wooded_badlands:
-      nome: "Badlands Arborizadas"
-      artigo: "nas"
+      mensagem: "&fVocê está nas &fBadlands Arborizadas"
     eroded_badlands:
-      nome: "Badlands Erodidas"
-      artigo: "nas"
+      mensagem: "&fVocê está nas &fBadlands Erodidas"
     mushroom_fields:
-      nome: "Campos de Cogumelos"
-      artigo: "nos"
+      mensagem: "&fVocê está nos &fCampos de Cogumelos"
     ice_spikes:
-      nome: "Espinhos de Gelo"
-      artigo: "nos"
+      mensagem: "&fVocê está nos &fEspinhos de Gelo"
     dark_forest:
-      nome: "Floresta Escura"
-      artigo: "na"
+      mensagem: "&fVocê está na &fFloresta Escura"
     birch_forest:
-      nome: "Floresta de Bétulas"
-      artigo: "na"
+      mensagem: "&fVocê está na &fFloresta de Bétulas"
     flower_forest:
-      nome: "Floresta de Flores"
-      artigo: "na"
+      mensagem: "&fVocê está na &fFloresta de Flores"
     sparse_jungle:
-      nome: "Selva Esparsa"
-      artigo: "na"
+      mensagem: "&fVocê está na &fSelva Esparsa"
     old_growth_pine_taiga:
-      nome: "Taiga de Pinheiros Antigos"
-      artigo: "na"
+      mensagem: "&fVocê está na &fTaiga de Pinheiros Antigos"
     old_growth_spruce_taiga:
-      nome: "Taiga de Abetos Antigos"
-      artigo: "na"
+      mensagem: "&fVocê está na &fTaiga de Abetos Antigos"
     sunflower_plains:
-      nome: "Planícies de Girassóis"
-      artigo: "nas"
+      mensagem: "&fVocê está nas &fPlanícies de Girassóis"
     deep_dark:
-      nome: "Escuridão Profunda"
-      artigo: "na"
+      mensagem: "&fVocê está na &fEscuridão Profunda"
     dripstone_caves:
-      nome: "Cavernas de Dripstone"
-      artigo: "nas"
+      mensagem: "&fVocê está nas &fCavernas de Dripstone"
     lush_caves:
-      nome: "Cavernas Exuberantes"
-      artigo: "nas"
+      mensagem: "&fVocê está nas &fCavernas Exuberantes"
     nether_wastes:
-      nome: "Dunas do Nether"
-      artigo: "nas"
+      mensagem: "&fVocê está nas &fDunas do Nether"
     soul_sand_valley:
-      nome: "Vale das Areias das Almas"
-      artigo: "no"
+      mensagem: "&fVocê está no &fVale das Areias das Almas"
     crimson_forest:
-      nome: "Floresta Carmesim"
-      artigo: "na"
+      mensagem: "&fVocê está na &fFloresta Carmesim"
     warped_forest:
-      nome: "Floresta Distorcida"
-      artigo: "na"
+      mensagem: "&fVocê está na &fFloresta Distorcida"
     basalt_deltas:
-      nome: "Deltas de Basalto"
-      artigo: "nos"
+      mensagem: "&fVocê está nos &fDeltas de Basalto"
     the_end:
-      nome: "O End"
-      artigo: "no"
+      mensagem: "&fVocê está no &fO End"
     end_highlands:
-      nome: "Terras Altas do End"
-      artigo: "nas"
+      mensagem: "&fVocê está nas &fTerras Altas do End"
     end_midlands:
-      nome: "Terras Médias do End"
-      artigo: "nas"
+      mensagem: "&fVocê está nas &fTerras Médias do End"
     small_end_islands:
-      nome: "Pequenas Ilhas do End"
-      artigo: "nas"
+      mensagem: "&fVocê está nas &fPequenas Ilhas do End"
     end_barrens:
-      nome: "Ermos do End"
-      artigo: "nos"
+      mensagem: "&fVocê está nos &fErmos do End"
     deep_cold_ocean:
-      nome: "Oceano Profundo Frio"
-      artigo: "no"
+      mensagem: "&fVocê está no &fOceano Profundo Frio"
     deep_frozen_ocean:
-      nome: "Oceano Profundo Congelado"
-      artigo: "no"
+      mensagem: "&fVocê está no &fOceano Profundo Congelado"
     deep_lukewarm_ocean:
-      nome: "Oceano Profundo Morno"
-      artigo: "no"
+      mensagem: "&fVocê está no &fOceano Profundo Morno"
     lukewarm_ocean:
-      nome: "Oceano Morno"
-      artigo: "no"
+      mensagem: "&fVocê está no &fOceano Morno"
     old_growth_birch_forest:
-      nome: "Floresta de Bétulas Antigas"
-      artigo: "na"
+      mensagem: "&fVocê está na &fFloresta de Bétulas Antigas"
     pale_garden:
-      nome: "Jardim Pálido"
-      artigo: "no"
+      mensagem: "&fVocê está no &fJardim Pálido"
     savanna_plateau:
-      nome: "Planalto de Savanna"
-      artigo: "no"
+      mensagem: "&fVocê está no &fPlanalto de Savanna"
     snowy_beach:
-      nome: "Praia Nevada"
-      artigo: "na"
+      mensagem: "&fVocê está na &fPraia Nevada"
     snowy_slopes:
-      nome: "Encostas Nevadas"
-      artigo: "nas"
+      mensagem: "&fVocê está nas &fEncostas Nevadas"
     sulfur_caves:
-      nome: "Cavernas de Enxofre"
-      artigo: "nas"
+      mensagem: "&fVocê está nas &fCavernas de Enxofre"
     the_void:
-      nome: "O Vazio"
-      artigo: "no"
+      mensagem: "&fVocê está no &fO Vazio"
     savanna:
-      nome: "na"
-      artigo: "na"
+      mensagem: "&fVocê está na &fna"
     desert:
-      nome: "no"
-      artigo: "no"
+      mensagem: "&fVocê está no &fno"
     plains:
-      nome: "nas"
-      artigo: "nas"
+      mensagem: "&fVocê está nas &fnas"
     forest:
-      nome: "na"
-      artigo: "na"
+      mensagem: "&fVocê está na &fna"
     jungle:
-      nome: "na"
-      artigo: "na"
+      mensagem: "&fVocê está na &fna"
     bamboo_jungle:
-      nome: "na"
-      artigo: "na"
+      mensagem: "&fVocê está na &fna"
     swamp:
-      nome: "no"
-      artigo: "no"
+      mensagem: "&fVocê está no &fno"
     mangrove_swamp:
-      nome: "no"
-      artigo: "no"
+      mensagem: "&fVocê está no &fno"
     taiga:
-      nome: "na"
-      artigo: "na"
+      mensagem: "&fVocê está na &fna"
     snowy_taiga:
-      nome: "na"
-      artigo: "na"
+      mensagem: "&fVocê está na &fna"
     snowy_plains:
-      nome: "nas"
-      artigo: "nas"
+      mensagem: "&fVocê está nas &fnas"
     meadow:
-      nome: "no"
-      artigo: "no"
+      mensagem: "&fVocê está no &fno"
     cherry_grove:
-      nome: "no"
-      artigo: "no"
+      mensagem: "&fVocê está no &fno"
     grove:
-      nome: "no"
-      artigo: "no"
+      mensagem: "&fVocê está no &fno"
     windswept_hills:
-      nome: "nas"
-      artigo: "nas"
+      mensagem: "&fVocê está nas &fnas"
     windswept_forest:
-      nome: "na"
-      artigo: "na"
+      mensagem: "&fVocê está na &fna"
     windswept_gravelly_hills:
-      nome: "nas"
-      artigo: "nas"
+      mensagem: "&fVocê está nas &fnas"
     windswept_savanna:
-      nome: "na"
-      artigo: "na"
+      mensagem: "&fVocê está na &fna"
     jagged_peaks:
-      nome: "nos"
-      artigo: "nos"
+      mensagem: "&fVocê está nos &fnos"
     frozen_peaks:
-      nome: "nos"
-      artigo: "nos"
+      mensagem: "&fVocê está nos &fnos"
     stony_peaks:
-      nome: "nos"
-      artigo: "nos"
+      mensagem: "&fVocê está nos &fnos"
     ocean:
-      nome: "no"
-      artigo: "no"
+      mensagem: "&fVocê está no &fno"
     deep_ocean:
-      nome: "no"
-      artigo: "no"
+      mensagem: "&fVocê está no &fno"
     cold_ocean:
-      nome: "no"
-      artigo: "no"
+      mensagem: "&fVocê está no &fno"
     frozen_ocean:
-      nome: "no"
-      artigo: "no"
+      mensagem: "&fVocê está no &fno"
     warm_ocean:
-      nome: "no"
-      artigo: "no"
+      mensagem: "&fVocê está no &fno"
     river:
-      nome: "no"
-      artigo: "no"
+      mensagem: "&fVocê está no &fno"
     frozen_river:
-      nome: "no"
-      artigo: "no"
+      mensagem: "&fVocê está no &fno"
     beach:
-      nome: "na"
-      artigo: "na"
+      mensagem: "&fVocê está na &fna"
     stony_shore:
-      nome: "na"
-      artigo: "na"
+      mensagem: "&fVocê está na &fna"
     badlands:
-      nome: "nas"
-      artigo: "nas"
+      mensagem: "&fVocê está nas &fnas"
     wooded_badlands:
-      nome: "nas"
-      artigo: "nas"
+      mensagem: "&fVocê está nas &fnas"
     eroded_badlands:
-      nome: "nas"
-      artigo: "nas"
+      mensagem: "&fVocê está nas &fnas"
     mushroom_fields:
-      nome: "nos"
-      artigo: "nos"
+      mensagem: "&fVocê está nos &fnos"
     ice_spikes:
-      nome: "nos"
-      artigo: "nos"
+      mensagem: "&fVocê está nos &fnos"
     dark_forest:
-      nome: "na"
-      artigo: "na"
+      mensagem: "&fVocê está na &fna"
     birch_forest:
-      nome: "na"
-      artigo: "na"
+      mensagem: "&fVocê está na &fna"
     flower_forest:
-      nome: "na"
-      artigo: "na"
+      mensagem: "&fVocê está na &fna"
     sparse_jungle:
-      nome: "na"
-      artigo: "na"
+      mensagem: "&fVocê está na &fna"
     old_growth_pine_taiga:
-      nome: "na"
-      artigo: "na"
+      mensagem: "&fVocê está na &fna"
     old_growth_spruce_taiga:
-      nome: "na"
-      artigo: "na"
+      mensagem: "&fVocê está na &fna"
     sunflower_plains:
-      nome: "nas"
-      artigo: "nas"
+      mensagem: "&fVocê está nas &fnas"
     deep_dark:
-      nome: "na"
-      artigo: "na"
+      mensagem: "&fVocê está na &fna"
     dripstone_caves:
-      nome: "nas"
-      artigo: "nas"
+      mensagem: "&fVocê está nas &fnas"
     lush_caves:
-      nome: "nas"
-      artigo: "nas"
+      mensagem: "&fVocê está nas &fnas"
     nether_wastes:
-      nome: "nas"
-      artigo: "nas"
+      mensagem: "&fVocê está nas &fnas"
     soul_sand_valley:
-      nome: "no"
-      artigo: "no"
+      mensagem: "&fVocê está no &fno"
     crimson_forest:
-      nome: "na"
-      artigo: "na"
+      mensagem: "&fVocê está na &fna"
     warped_forest:
-      nome: "na"
-      artigo: "na"
+      mensagem: "&fVocê está na &fna"
     basalt_deltas:
-      nome: "nos"
-      artigo: "nos"
+      mensagem: "&fVocê está nos &fnos"
     the_end:
-      nome: "no"
-      artigo: "no"
+      mensagem: "&fVocê está no &fno"
     end_highlands:
-      nome: "nas"
-      artigo: "nas"
+      mensagem: "&fVocê está nas &fnas"
     end_midlands:
-      nome: "nas"
-      artigo: "nas"
+      mensagem: "&fVocê está nas &fnas"
     small_end_islands:
-      nome: "nas"
-      artigo: "nas"
+      mensagem: "&fVocê está nas &fnas"
     end_barrens:
-      nome: "nos"
-      artigo: "nos"
+      mensagem: "&fVocê está nos &fnos"
     deep_cold_ocean:
-      nome: "no"
-      artigo: "no"
+      mensagem: "&fVocê está no &fno"
     deep_frozen_ocean:
-      nome: "no"
-      artigo: "no"
+      mensagem: "&fVocê está no &fno"
     deep_lukewarm_ocean:
-      nome: "no"
-      artigo: "no"
+      mensagem: "&fVocê está no &fno"
     lukewarm_ocean:
-      nome: "no"
-      artigo: "no"
+      mensagem: "&fVocê está no &fno"
     old_growth_birch_forest:
-      nome: "na"
-      artigo: "na"
+      mensagem: "&fVocê está na &fna"
     pale_garden:
-      nome: "no"
-      artigo: "no"
+      mensagem: "&fVocê está no &fno"
     savanna_plateau:
-      nome: "no"
-      artigo: "no"
+      mensagem: "&fVocê está no &fno"
     snowy_beach:
-      nome: "na"
-      artigo: "na"
+      mensagem: "&fVocê está na &fna"
     snowy_slopes:
-      nome: "nas"
-      artigo: "nas"
+      mensagem: "&fVocê está nas &fnas"
     sulfur_caves:
-      nome: "nas"
-      artigo: "nas"
+      mensagem: "&fVocê está nas &fnas"
     the_void:
-      nome: "no"
-      artigo: "no"
+      mensagem: "&fVocê está no &fno"
 
 mensagens:
   prefixo: "&7&lᴡᴏʀʟᴅᴘʟᴜs &8• &r"
