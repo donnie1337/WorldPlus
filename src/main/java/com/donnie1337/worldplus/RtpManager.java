@@ -245,27 +245,14 @@ public final class RtpManager implements Listener {
                 return;
             }
 
-            int y = highest + 1;
-            if (world.getEnvironment() == World.Environment.NETHER) {
-                y = findSafeNetherY(snapshot, localX, localZ, minY, maxY);
-                if (y == Integer.MIN_VALUE) {
-                    findCandidate(player, world, settings, attempts, attempt + 1, minRadius, maxRadius,
-                            useBorder, centerX, centerZ, shape, minY, maxY, callback);
-                    return;
-                }
-            }
-
-            Material floor = snapshot.getBlockType(localX, y - 1, localZ);
-            Material feet = snapshot.getBlockType(localX, y, localZ);
-            Material head = snapshot.getBlockType(localX, y + 1, localZ);
-
-            if (!isSafeMaterials(floor, feet, head)) {
+            Location safe = findSafeSurface(snapshot, world, blockX, blockZ, localX, localZ, minY, maxY);
+            if (safe == null) {
                 findCandidate(player, world, settings, attempts, attempt + 1, minRadius, maxRadius,
                         useBorder, centerX, centerZ, shape, minY, maxY, callback);
                 return;
             }
 
-            callback.accept(new Location(world, blockX + 0.5D, y, blockZ + 0.5D));
+            callback.accept(safe);
         } catch (Throwable throwable) {
             plugin.getLogger().warning("Falha ao analisar chunk do RTP em " + chunkX + "," + chunkZ
                     + " no mundo " + world.getName() + ": " + throwable.getMessage());
@@ -274,17 +261,111 @@ public final class RtpManager implements Listener {
         }
     }
 
-    private int findSafeNetherY(org.bukkit.ChunkSnapshot snapshot, int localX, int localZ, int minY, int maxY) {
+    private Location findSafeSurface(org.bukkit.ChunkSnapshot snapshot, World world, int blockX, int blockZ,
+                                      int localX, int localZ, int minY, int maxY) {
         int top = Math.min(maxY, snapshot.getHighestBlockYAt(localX, localZ));
-        for (int y = top; y >= minY + 1; y--) {
+
+        if (world.getEnvironment() == World.Environment.NETHER) {
+            return findNetherSurface(snapshot, world, blockX, blockZ, localX, localZ, minY, top, maxY);
+        }
+
+        for (int y = top + 1; y >= minY + 1; y--) {
             Material floor = snapshot.getBlockType(localX, y - 1, localZ);
             Material feet = snapshot.getBlockType(localX, y, localZ);
             Material head = snapshot.getBlockType(localX, y + 1, localZ);
-            if (isSolid(floor) && isAirLike(feet) && isAirLike(head) && isSafeMaterials(floor, feet, head)) {
-                return y;
+
+            if (!isValidSurface(world.getEnvironment(), floor)) continue;
+            if (!isAirLike(feet) || !isAirLike(head)) continue;
+            if (!isSafeMaterials(floor, feet, head)) continue;
+
+            // A superfície precisa estar realmente do lado de fora. Assim uma
+            // coordenada no fundo de uma caverna não passa apenas por ser o
+            // bloco mais alto daquela coluna.
+            if (!hasOpenSky(snapshot, localX, localZ, y, world.getMaxHeight())) continue;
+
+            return new Location(world, blockX + 0.5D, y, blockZ + 0.5D);
+        }
+
+        return null;
+    }
+
+    private Location findNetherSurface(org.bukkit.ChunkSnapshot snapshot, World world, int blockX, int blockZ,
+                                       int localX, int localZ, int minY, int top, int maxY) {
+        for (int y = top + 1; y >= minY + 1; y--) {
+            Material floor = snapshot.getBlockType(localX, y - 1, localZ);
+            Material feet = snapshot.getBlockType(localX, y, localZ);
+            Material head = snapshot.getBlockType(localX, y + 1, localZ);
+
+            if (!isValidSurface(World.Environment.NETHER, floor)) continue;
+            if (!isAirLike(feet) || !isAirLike(head)) continue;
+            if (!isSafeMaterials(floor, feet, head)) continue;
+
+            // No Nether não existe céu aberto como no Overworld. Exigimos,
+            // porém, espaço vertical suficiente para não nascer dentro de
+            // um túnel/caverna apertado.
+            int open = 0;
+            for (int checkY = y + 2; checkY <= Math.min(maxY, snapshot.getHighestBlockYAt(localX, localZ) + 16); checkY++) {
+                if (!isAirLike(snapshot.getBlockType(localX, checkY, localZ))) break;
+                open++;
+                if (open >= 8) break;
+            }
+            if (open < 8) continue;
+
+            return new Location(world, blockX + 0.5D, y, blockZ + 0.5D);
+        }
+
+        return null;
+    }
+
+    private boolean hasOpenSky(org.bukkit.ChunkSnapshot snapshot, int localX, int localZ, int y, int maxHeight) {
+        int scanMax = Math.min(maxHeight - 1, 384);
+        for (int checkY = y + 2; checkY <= scanMax; checkY++) {
+            if (!isAirLike(snapshot.getBlockType(localX, checkY, localZ))) {
+                return false;
             }
         }
-        return Integer.MIN_VALUE;
+        return true;
+    }
+
+    private boolean isValidSurface(World.Environment environment, Material material) {
+        if (material == null || material.isAir()) return false;
+
+        return switch (environment) {
+            case NORMAL -> isOverworldSurface(material);
+            case NETHER -> isNetherSurface(material);
+            case THE_END -> material == Material.END_STONE;
+            default -> false;
+        };
+    }
+
+    private boolean isOverworldSurface(Material material) {
+        String name = material.name();
+        return name.equals("GRASS_BLOCK")
+                || name.equals("DIRT")
+                || name.equals("COARSE_DIRT")
+                || name.equals("ROOTED_DIRT")
+                || name.equals("PODZOL")
+                || name.equals("MYCELIUM")
+                || name.equals("SAND")
+                || name.equals("RED_SAND")
+                || name.equals("GRAVEL")
+                || name.equals("CLAY")
+                || name.equals("MOSS_BLOCK")
+                || name.equals("SNOW_BLOCK")
+                || name.equals("MUD")
+                || name.equals("PACKED_MUD")
+                || name.endsWith("_LEAVES");
+    }
+
+    private boolean isNetherSurface(Material material) {
+        String name = material.name();
+        return name.equals("NETHERRACK")
+                || name.equals("CRIMSON_NYLIUM")
+                || name.equals("WARPED_NYLIUM")
+                || name.equals("SOUL_SAND")
+                || name.equals("SOUL_SOIL")
+                || name.equals("BLACKSTONE")
+                || name.equals("BASALT");
     }
 
     private boolean isSafeMaterials(Material floor, Material feet, Material head) {
@@ -301,7 +382,7 @@ public final class RtpManager implements Listener {
     }
 
     private boolean isAirLike(Material material) {
-        return material.isAir() || material == Material.WATER;
+        return material.isAir();
     }
 
     private double randomBetween(double min, double max) {
