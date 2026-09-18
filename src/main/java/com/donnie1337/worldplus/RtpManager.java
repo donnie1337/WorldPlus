@@ -184,22 +184,10 @@ public final class RtpManager implements Listener {
             return;
         }
 
-        world.getChunkAtAsync(chunkX, chunkZ, true).thenAccept(chunk -> {
-            if (!player.isOnline()) {
-                callback.accept(null);
-                return;
-            }
-
-            // O carregamento pode terminar fora da thread principal.
-            // A leitura dos blocos e a preparação do teleporte ficam na thread do servidor.
-            Bukkit.getScheduler().runTask(plugin, () -> {
-                if (!player.isOnline()) {
-                    callback.accept(null);
-                    return;
-                }
-                inspectLoadedChunk(player, world, settings, maxAttempts, attempt, chunk, callback);
-            });
-        });
+        // A API Spigot 26.2 não expõe getChunkAtAsync no contrato de World.
+        // Carrega somente a chunk escolhida para este RTP.
+        Chunk chunk = world.getChunkAt(chunkX, chunkZ, true);
+        inspectLoadedChunk(player, world, settings, maxAttempts, attempt, chunk, callback);
     }
 
     private void inspectChunk(Player player, World world, WorldSettings settings,
