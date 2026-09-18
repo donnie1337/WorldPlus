@@ -62,6 +62,7 @@ public final class WorldPlus extends JavaPlugin {
         getServer().getPluginManager().registerEvents(titleManager, this);
         getServer().getPluginManager().registerEvents(rtpManager, this);
         getServer().getPluginManager().registerEvents(rtpCommand, this);
+        getServer().getPluginManager().registerEvents(new WorldPortalListener(this), this);
         getLogger().info("WorldPlus: portais de Nether e End configurados.");
         getLogger().info("WorldPlus: sistema de RTP configurado.");
         getLogger().info("WorldPlus ativado.");
