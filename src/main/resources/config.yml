@@ -56,6 +56,77 @@ mundos:
     pvp: true
     manter-inventario: true
     dificuldade: "HARD"
+rtp:
+  geral:
+    atraso-segundos: 5
+    cancelar-ao-mover: true
+    cooldown-segundos: 60
+    max-tentativas: 32
+    blocos-bloqueados:
+      - water
+      - lava
+      - cactus
+      - fire
+      - soul_fire
+      - magma_block
+      - campfire
+      - soul_campfire
+      - powder_snow
+      - sweet_berry_bush
+      - pointed_dripstone
+      - bedrock
+      - air
+      - cave_air
+      - void_air
+  gui:
+    habilitado: true
+    titulo: "&8&lRTP &8• &fEscolha o mundo"
+  mundos:
+    overworld:
+      habilitado: true
+      usar-borda: true
+      centro-x: 0
+      centro-z: 0
+      raio-minimo: 250
+      raio-maximo: 4800
+      formato: "circle"
+      y-minimo: 0
+      y-maximo: 320
+      cooldown-segundos: 60
+    mineracao:
+      habilitado: true
+      usar-borda: true
+      centro-x: 0
+      centro-z: 0
+      raio-minimo: 150
+      raio-maximo: 3300
+      formato: "circle"
+      y-minimo: 0
+      y-maximo: 320
+      cooldown-segundos: 30
+    nether:
+      habilitado: true
+      usar-borda: true
+      centro-x: 0
+      centro-z: 0
+      raio-minimo: 100
+      raio-maximo: 3300
+      formato: "circle"
+      y-minimo: 32
+      y-maximo: 120
+      cooldown-segundos: 45
+    end:
+      habilitado: true
+      usar-borda: true
+      centro-x: 0
+      centro-z: 0
+      raio-minimo: 250
+      raio-maximo: 3300
+      formato: "circle"
+      y-minimo: 0
+      y-maximo: 320
+      cooldown-segundos: 60
+
 mensagens:
   prefixo: "&7&lᴡᴏʀʟᴅᴘʟᴜs &8• &r"
   sem-permissao: "&cVocê não tem permissão para executar este comando."
