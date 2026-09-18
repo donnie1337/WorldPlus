@@ -29,29 +29,77 @@ public final class RtpCommand implements CommandExecutor, TabCompleter, Listener
     }
 
     public void openMenu(Player player) {
-        int size = Math.max(9, Math.min(54, ((plugin.getWorlds().size() + 8) / 9) * 9));
-        Inventory inventory = Bukkit.createInventory(null, size, color(plugin.getConfig().getString("rtp.gui.titulo", "&8&lRTP • Escolha o mundo")));
-        int slot = 0;
+        // GUI fixo de 3 linhas (27 slots), com os mundos centralizados
+        // e separados visualmente entre si.
+        Inventory inventory = Bukkit.createInventory(
+                null,
+                27,
+                color(plugin.getConfig().getString("rtp.gui.titulo", "&8&lRTP &8• &fEscolha o mundo"))
+        );
+
+        Material separador = Material.GRAY_STAINED_GLASS_PANE;
+        ItemStack vidro = new ItemStack(separador);
+        ItemMeta vidroMeta = vidro.getItemMeta();
+        if (vidroMeta != null) {
+            vidroMeta.setDisplayName(color("&8"));
+            vidro.setItemMeta(vidroMeta);
+        }
+
+        // Moldura discreta nas duas linhas externas.
+        for (int slot : new int[]{
+                0, 1, 2, 3, 4, 5, 6, 7, 8,
+                18, 19, 20, 21, 22, 23, 24, 25, 26
+        }) {
+            inventory.setItem(slot, vidro.clone());
+        }
+
+        // Os mundos ficam no centro da segunda linha:
+        // 10 | 12 | 14 | 16
+        int[] slots = {10, 12, 14, 16};
+        int slotIndex = 0;
+
         for (WorldSettings settings : plugin.getWorlds().values()) {
-            if (!plugin.getConfig().getBoolean("rtp.mundos." + settings.id() + ".habilitado", true)) continue;
+            if (slotIndex >= slots.length) break;
+            if (!plugin.getConfig().getBoolean("rtp.mundos." + settings.id() + ".habilitado", true)) {
+                continue;
+            }
+
             Material material = switch (settings.environment()) {
                 case NETHER -> Material.NETHERRACK;
                 case THE_END -> Material.END_STONE;
                 default -> Material.GRASS_BLOCK;
             };
+
             ItemStack item = new ItemStack(material);
             ItemMeta meta = item.getItemMeta();
+
             if (meta != null) {
-                meta.setDisplayName(color("&b" + settings.id()));
+                String nome = switch (settings.environment()) {
+                    case NETHER -> "&c&lNether";
+                    case THE_END -> "&5&lThe End";
+                    default -> settings.id().equalsIgnoreCase("mineracao")
+                            ? "&e&lMineração"
+                            : "&a&lMundo Normal";
+                };
+
+                meta.setDisplayName(color(nome));
                 meta.setLore(List.of(
-                        color("&7Mundo: &f" + settings.name()),
-                        color("&7Raio: &f" + format(plugin.getConfig().getDouble("rtp.mundos." + settings.id() + ".raio-maximo", settings.size() / 2))),
-                        color("&aClique para usar o RTP")
+                        color("&8• &7Mundo: &f" + settings.name()),
+                        color("&8• &7Raio máximo: &f" + format(
+                                plugin.getConfig().getDouble(
+                                        "rtp.mundos." + settings.id() + ".raio-maximo",
+                                        settings.size() / 2
+                                )
+                        )),
+                        "",
+                        color("&a&lClique para teleportar")
                 ));
                 item.setItemMeta(meta);
             }
-            inventory.setItem(slot++, item);
+
+            inventory.setItem(slots[slotIndex++], item);
         }
+
         player.openInventory(inventory);
     }
 
