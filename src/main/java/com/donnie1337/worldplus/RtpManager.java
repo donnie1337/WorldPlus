@@ -1,6 +1,8 @@
 package com.donnie1337.worldplus;
 
 import org.bukkit.Bukkit;
+import org.bukkit.ChatColor;
+import org.bukkit.Chunk;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.World;
@@ -11,20 +13,19 @@ import org.bukkit.event.Listener;
 import org.bukkit.event.player.PlayerMoveEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 
-import java.util.*;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
+import java.util.function.Consumer;
 
 public final class RtpManager implements Listener {
     private final WorldPlus plugin;
     private final Map<UUID, Long> cooldowns = new HashMap<>();
     private final Map<UUID, Long> delays = new HashMap<>();
     private final Map<UUID, String> pendingWorlds = new HashMap<>();
-    private final Map<UUID, Location> pendingLocations = new HashMap<>();
-    private final Map<UUID, Boolean> delayExpired = new HashMap<>();
-    private final Set<UUID> pendingTeleport = new HashSet<>();
     private final Map<String, Long> heatmap = new HashMap<>();
-    private final Set<UUID> processing = new HashSet<>();
-    private final Queue<RtpRequest> queue = new ArrayDeque<>();
 
     public RtpManager(WorldPlus plugin) {
         this.plugin = plugin;
@@ -37,517 +38,248 @@ public final class RtpManager implements Listener {
             return;
         }
 
-        if (!plugin.getConfig().getBoolean("rtp.mundos." + settings.id() + ".habilitado", true)) {
+        String path = "rtp.mundos." + settings.id();
+        if (!plugin.getConfig().getBoolean(path + ".habilitado", true)) {
             message(player, "mundo-desativado", "&cO RTP está desativado neste mundo.", null, null);
             return;
         }
 
-        if (!player.hasPermission("worldplus.rtp.world." + settings.id()) && !player.hasPermission("worldplus.rtp.world.*")) {
-            message(player, "sem-permissao-rtp", "&cVocê não tem permissão para usar o RTP neste mundo.", null, null);
+        if (!player.hasPermission("worldplus.rtp.world." + settings.id())
+                && !player.hasPermission("worldplus.rtp.world.*")) {
+            message(player, "sem-permissao-rtp",
+                    "&cVocê não tem permissão para usar o RTP neste mundo.", null, null);
             return;
         }
 
         if (!player.hasPermission("worldplus.rtp.bypass.cooldown")) {
             long remaining = cooldownRemaining(player);
             if (remaining > 0) {
-                message(player, "cooldown", "&cAguarde &f{tempo}s &cantes de usar o RTP novamente.", "tempo", Long.toString(remaining));
+                message(player, "cooldown",
+                        "&cAguarde &f{tempo}s &cantes de usar o RTP novamente.",
+                        "tempo", Long.toString(remaining));
                 return;
             }
         }
 
-        if (processing.contains(player.getUniqueId()) || pendingWorlds.containsKey(player.getUniqueId())) {
+        UUID uuid = player.getUniqueId();
+        if (pendingWorlds.containsKey(uuid)) {
             message(player, "em-processamento", "&bSeu RTP já está sendo processado.", null, null);
             return;
         }
 
-        int delay = plugin.getConfig().getInt("rtp.geral.atraso-segundos", 5);
-        // O atraso é mantido como configurado. A busca do destino ocorre sob demanda
-        // e somente gera a chunk do candidato, sem pré-gerar o mundo inteiro.
+        int delay = Math.max(0, plugin.getConfig().getInt("rtp.geral.atraso-segundos", 3));
+        pendingWorlds.put(uuid, settings.id());
+
         if (delay > 0 && !player.hasPermission("worldplus.rtp.bypass.delay")) {
-            UUID uuid = player.getUniqueId();
-            pendingWorlds.put(uuid, settings.id());
-            pendingLocations.remove(uuid);
-            delayExpired.put(uuid, false);
             delays.put(uuid, System.currentTimeMillis() + delay * 1000L);
 
             if (plugin.getTitleManager() != null) {
                 plugin.getTitleManager().showRtpLoading(player, delay * 20);
             }
 
-            // A busca ocorre durante o processamento normal do RTP.
-            enqueue(player, settings.id());
-
             Bukkit.getScheduler().runTaskLater(plugin, () -> {
-                if (!player.isOnline()) return;
-
+                if (!player.isOnline() || !pendingWorlds.containsKey(uuid)) return;
                 delays.remove(uuid);
-                delayExpired.put(uuid, true);
-
-                // Se o destino já estiver pronto, teleporta agora.
-                attemptPendingTeleport(player, settings);
+                findAndTeleport(player, settings);
             }, delay * 20L);
             return;
         }
 
-        enqueue(player, settings.id());
+        findAndTeleport(player, settings);
     }
 
-    private void enqueue(Player player, String worldId) {
-        queue.offer(new RtpRequest(player.getUniqueId(), worldId));
-        processNext();
-    }
-
-    private void processNext() {
-        if (!processing.isEmpty()) return;
-        RtpRequest request = queue.poll();
-        if (request == null) return;
-        Player player = Bukkit.getPlayer(request.playerId());
-        if (player == null || !player.isOnline()) {
-            processNext();
-            return;
-        }
-        processing.add(player.getUniqueId());
-        Bukkit.getScheduler().runTask(plugin, () -> perform(player, request.worldId()));
-    }
-
-    private void perform(Player player, String worldId) {
-        WorldSettings settings = plugin.getSettings(worldId);
-        if (settings == null) {
-            finish(player);
+    private void findAndTeleport(Player player, WorldSettings settings) {
+        if (!player.isOnline()) {
+            clear(player);
             return;
         }
 
         World world = Bukkit.getWorld(settings.name());
-        if (world == null) world = plugin.createOrLoadWorld(settings);
+        if (world == null) {
+            world = plugin.createOrLoadWorld(settings);
+        }
+
         if (world == null) {
             message(player, "erro", "&cNão foi possível carregar o mundo de RTP.", null, null);
-            finish(player);
+            clear(player);
             return;
         }
 
-        // A referência usada pelo callback precisa ser final/efetivamente final.
-        // A variável world acima pode ser reatribuída durante o carregamento.
-        final World rtpWorld = world;
-
-        // O RTP escolhe uma única coordenada aleatória e trabalha somente com a
-        // chunk que contém essa coordenada. Assim que a chunk estiver pronta e
-        // o bloco de superfície for validado, o jogador é teleportado imediatamente.
+        final World targetWorld = world;
         int attempts = Math.max(1, plugin.getConfig().getInt("rtp.geral.max-tentativas", 32));
-        findSafeLocationAsync(player, rtpWorld, settings, attempts, safe -> {
-            if (safe == null) {
-                UUID uuid = player.getUniqueId();
-                pendingWorlds.remove(uuid);
-                pendingLocations.remove(uuid);
-                delayExpired.remove(uuid);
-                delays.remove(uuid);
-                pendingTeleport.remove(uuid);
-                message(player, "local-nao-encontrado", "&cNão foi possível encontrar um local seguro para o RTP.", null, null);
-                finish(player);
+
+        findChunk(player, targetWorld, settings, attempts, 0, location -> {
+            if (location == null) {
+                message(player, "local-nao-encontrado",
+                        "&cNão foi possível encontrar um local seguro para o RTP.", null, null);
+                clear(player);
                 return;
             }
 
-            UUID uuid = player.getUniqueId();
-            if (pendingWorlds.containsKey(uuid)) {
-                pendingLocations.put(uuid, safe);
-
-                // Se o destino ficou pronto durante o atraso, teleporta imediatamente.
-                if (Boolean.TRUE.equals(delayExpired.get(uuid))) {
-                    attemptPendingTeleport(player, settings);
+            Bukkit.getScheduler().runTask(plugin, () -> {
+                if (!player.isOnline() || !pendingWorlds.containsKey(player.getUniqueId())) {
+                    clear(player);
+                    return;
                 }
-                return;
-            }
 
-            teleportReady(player, settings, safe, rtpWorld);
-        });
-    }
-
-    private void attemptPendingTeleport(Player player, WorldSettings settings) {
-        UUID uuid = player.getUniqueId();
-
-        if (!Boolean.TRUE.equals(delayExpired.get(uuid))) return;
-        if (!pendingWorlds.containsKey(uuid)) return;
-        if (pendingTeleport.contains(uuid)) return;
-
-        Location ready = pendingLocations.get(uuid);
-        if (ready == null) return;
-
-        World world = ready.getWorld();
-        if (world == null || !player.isOnline()) {
-            pendingLocations.remove(uuid);
-            pendingWorlds.remove(uuid);
-            delayExpired.remove(uuid);
-            finish(player);
-            return;
-        }
-
-        pendingTeleport.add(uuid);
-        teleportReady(player, settings, ready, world);
-    }
-
-    private void teleportReady(Player player, WorldSettings settings, Location location, World world) {
-        UUID uuid = player.getUniqueId();
-        teleportAttempt(player, settings, location, world, 0);
-    }
-
-    private void teleportAttempt(Player player, WorldSettings settings, Location location, World world, int attempt) {
-        UUID uuid = player.getUniqueId();
-
-        if (!player.isOnline()) {
-            pendingTeleport.remove(uuid);
-            pendingWorlds.remove(uuid);
-            pendingLocations.remove(uuid);
-            delayExpired.remove(uuid);
-            finish(player);
-            return;
-        }
-
-        Bukkit.getScheduler().runTask(plugin, () -> {
-            if (!player.isOnline()) {
-                pendingTeleport.remove(uuid);
-                pendingWorlds.remove(uuid);
-                pendingLocations.remove(uuid);
-                delayExpired.remove(uuid);
-                finish(player);
-                return;
-            }
-
-            try {
-                int chunkX = location.getBlockX() >> 4;
-                int chunkZ = location.getBlockZ() >> 4;
-
-                // A chunk já foi gerada/carregada pelo fluxo de busca. Não
-                // chamamos loadChunk novamente para evitar uma segunda operação.
-                boolean accepted = player.teleport(
+                boolean teleported = player.teleport(
                         location,
                         org.bukkit.event.player.PlayerTeleportEvent.TeleportCause.PLUGIN
                 );
 
-                // Não consideramos o RTP concluído só porque a API aceitou a chamada.
-                // O próximo tick confirma que o jogador realmente chegou ao destino.
-                Bukkit.getScheduler().runTaskLater(plugin, () -> {
-                    if (!player.isOnline()) {
-                        pendingTeleport.remove(uuid);
-                        pendingWorlds.remove(uuid);
-                        pendingLocations.remove(uuid);
-                        delayExpired.remove(uuid);
-                        finish(player);
-                        return;
-                    }
-
-                    Location current = player.getLocation();
-                    boolean arrived = current.getWorld() != null
-                            && current.getWorld().getUID().equals(world.getUID())
-                            && current.distanceSquared(location) <= 1.0D;
-
-                    if (accepted && arrived) {
-                        completeTeleport(player, settings, location, world);
-                        return;
-                    }
-
-                    if (attempt < 5) {
-                        // Alguns ciclos de plugins/teleportação podem processar o
-                        // PlayerTeleportEvent depois da primeira chamada. Repetimos
-                        // no tick seguinte sem iniciar novo delay de RTP.
-                        teleportAttempt(player, settings, location, world, attempt + 1);
-                        return;
-                    }
-
-                    plugin.getLogger().warning(
-                            "RTP não confirmou a chegada de " + player.getName()
-                                    + " ao destino " + location.getBlockX() + ","
-                                    + location.getBlockY() + "," + location.getBlockZ()
-                                    + " após " + (attempt + 1) + " tentativas."
-                    );
-                    pendingTeleport.remove(uuid);
-                    pendingWorlds.remove(uuid);
-                    pendingLocations.remove(uuid);
-                    delayExpired.remove(uuid);
+                if (!teleported) {
                     message(player, "local-nao-encontrado",
                             "&cNão foi possível concluir o teleporte para o local preparado.", null, null);
-                    finish(player);
-                }, 1L);
-            } catch (Throwable throwable) {
-                if (attempt < 5) {
-                    Bukkit.getScheduler().runTaskLater(plugin,
-                            () -> teleportAttempt(player, settings, location, world, attempt + 1), 1L);
+                    clear(player);
                     return;
                 }
 
-                plugin.getLogger().warning("Falha ao teleportar jogador para o RTP: "
-                        + throwable.getMessage());
-                pendingTeleport.remove(uuid);
-                pendingWorlds.remove(uuid);
-                pendingLocations.remove(uuid);
-                delayExpired.remove(uuid);
-                if (plugin.getTitleManager() != null) {
-                    plugin.getTitleManager().endRtpTitle(player);
-                }
-                message(player, "local-nao-encontrado",
-                        "&cNão foi possível concluir o teleporte para o local preparado.", null, null);
-                finish(player);
-            }
+                completeTeleport(player, settings, location);
+            });
         });
     }
 
-    private void completeTeleport(Player player, WorldSettings settings, Location location, World world) {
-        UUID uuid = player.getUniqueId();
-
-        pendingTeleport.remove(uuid);
-        pendingWorlds.remove(uuid);
-        pendingLocations.remove(uuid);
-        delayExpired.remove(uuid);
-        delays.remove(uuid);
-
-        if (plugin.getTitleManager() != null) {
-            plugin.getTitleManager().endRtpTitle(player);
+    /**
+     * Escolhe uma única chunk por tentativa e carrega somente essa chunk.
+     * Depois que ela estiver pronta, o RTP procura uma coluna segura dentro dela.
+     * Não existe fila global, pré-geração ou carregamento de várias chunks.
+     */
+    private void findChunk(Player player, World world, WorldSettings settings,
+                           int maxAttempts, int attempt, Consumer<Location> callback) {
+        if (!player.isOnline() || attempt >= maxAttempts) {
+            callback.accept(null);
+            return;
         }
 
-        if (plugin.getTitleManager() != null) {
-            plugin.getTitleManager().showBiomeAfterRtp(player, location);
-        }
-
-        cooldowns.put(uuid, System.currentTimeMillis() + cooldownSeconds(settings) * 1000L);
-        heatmap.merge(world.getName(), 1L, Long::sum);
-
-        // Depois do teleporte, a própria presença/renderização do jogador
-        // mantém/carrega a chunk de destino.
-        finish(player);
-    }
-
-    private void finish(Player player) {
-        processing.remove(player.getUniqueId());
-        if (plugin.isEnabled()) {
-            Bukkit.getScheduler().runTask(plugin, this::processNext);
-        }
-    }
-
-    private void findSafeLocationAsync(Player player, World world, WorldSettings settings, int attempts,
-                                       java.util.function.Consumer<Location> callback) {
-        int minRadius = Math.max(0, plugin.getConfig().getInt(
-                "rtp.mundos." + settings.id() + ".raio-minimo", 0));
-        int maxRadius = Math.max(minRadius + 1, plugin.getConfig().getInt(
-                "rtp.mundos." + settings.id() + ".raio-maximo",
-                (int) (world.getWorldBorder().getSize() / 2.0D)));
+        String path = "rtp.mundos." + settings.id();
+        int minRadius = Math.max(0, plugin.getConfig().getInt(path + ".raio-minimo", 100));
+        int maxRadius = Math.max(minRadius + 1,
+                plugin.getConfig().getInt(path + ".raio-maximo",
+                        (int) (world.getWorldBorder().getSize() / 2.0D)));
 
         double centerX = plugin.getConfig().getDouble(
-                "rtp.mundos." + settings.id() + ".centro-x",
-                world.getWorldBorder().getCenter().getX());
+                path + ".centro-x", world.getWorldBorder().getCenter().getX());
         double centerZ = plugin.getConfig().getDouble(
-                "rtp.mundos." + settings.id() + ".centro-z",
-                world.getWorldBorder().getCenter().getZ());
-
-        int minY = plugin.getConfig().getInt("rtp.mundos." + settings.id() + ".y-minimo", 0);
-        int maxY = plugin.getConfig().getInt("rtp.mundos." + settings.id() + ".y-maximo", 320);
-
-        findCandidate(player, world, settings, attempts, 0, centerX, centerZ,
-                minRadius, maxRadius, minY, maxY, callback);
-    }
-
-    private void findCandidate(Player player, World world, WorldSettings settings, int attempts, int attempt,
-                               double centerX, double centerZ, int minRadius, int maxRadius,
-                               int minY, int maxY, java.util.function.Consumer<Location> callback) {
-        if (!player.isOnline()) {
-            callback.accept(null);
-            return;
-        }
-
-        if (attempt >= attempts) {
-            callback.accept(null);
-            return;
-        }
+                path + ".centro-z", world.getWorldBorder().getCenter().getZ());
 
         ThreadLocalRandom random = ThreadLocalRandom.current();
-
-        // Distribuição uniforme pela área do círculo/anel, respeitando exatamente
-        // raio-mínimo e raio-máximo da configuração do mundo.
         double minSquared = (double) minRadius * minRadius;
         double maxSquared = (double) maxRadius * maxRadius;
         double radius = Math.sqrt(random.nextDouble(minSquared, maxSquared));
         double angle = random.nextDouble(0.0D, Math.PI * 2.0D);
 
-        double x = centerX + Math.cos(angle) * radius;
-        double z = centerZ + Math.sin(angle) * radius;
-        int chunkX = ((int) Math.floor(x)) >> 4;
-        int chunkZ = ((int) Math.floor(z)) >> 4;
+        int x = (int) Math.floor(centerX + Math.cos(angle) * radius);
+        int z = (int) Math.floor(centerZ + Math.sin(angle) * radius);
+        int chunkX = x >> 4;
+        int chunkZ = z >> 4;
 
-        Location probe = new Location(world, chunkX * 16 + 8.0D, 64.0D, chunkZ * 16 + 8.0D);
+        Location probe = new Location(world, x + 0.5D, world.getMinHeight(), z + 0.5D);
         if (!world.getWorldBorder().isInside(probe)) {
-            retryCandidate(player, world, settings, attempts, attempt,
-                    centerX, centerZ, 0.0D, minY, maxY, callback);
+            retry(player, world, settings, maxAttempts, attempt, callback);
             return;
         }
 
-        // Assim como os RTPs tradicionais, o WorldPlus gera/carrega somente
-        // a chunk do candidato atual. Não existe pré-geração do mundo.
-        if (!world.isChunkGenerated(chunkX, chunkZ)) {
-            prepareChunkAsync(world, chunkX, chunkZ, generated -> {
-                if (!generated) {
-                    retryCandidate(player, world, settings, attempts, attempt,
-                            centerX, centerZ, 0.0D, minY, maxY, callback);
-                    return;
-                }
-
-                Bukkit.getScheduler().runTask(plugin, () -> {
-                    Location safe = analyzeChunkForSurface(world, chunkX, chunkZ, minY, maxY);
-                    if (safe != null) {
-                        callback.accept(safe);
-                    } else {
-                        retryCandidate(player, world, settings, attempts, attempt,
-                                centerX, centerZ, 0.0D, minY, maxY, callback);
-                    }
-                });
-            });
+        if (world.isChunkLoaded(chunkX, chunkZ)) {
+            inspectChunk(player, world, settings, maxAttempts, attempt, chunkX, chunkZ, callback);
             return;
         }
 
-        Location safe = analyzeChunkForSurface(world, chunkX, chunkZ, minY, maxY);
+        world.getChunkAtAsync(chunkX, chunkZ, true, chunk -> {
+            if (!player.isOnline()) {
+                callback.accept(null);
+                return;
+            }
+            inspectLoadedChunk(player, world, settings, maxAttempts, attempt, chunk, callback);
+        });
+    }
+
+    private void inspectChunk(Player player, World world, WorldSettings settings,
+                              int maxAttempts, int attempt, int chunkX, int chunkZ,
+                              Consumer<Location> callback) {
+        Chunk chunk = world.getChunkAt(chunkX, chunkZ, false);
+        inspectLoadedChunk(player, world, settings, maxAttempts, attempt, chunk, callback);
+    }
+
+    private void inspectLoadedChunk(Player player, World world, WorldSettings settings,
+                                    int maxAttempts, int attempt, Chunk chunk,
+                                    Consumer<Location> callback) {
+        Location safe = findSafeColumn(world, chunk);
         if (safe != null) {
             callback.accept(safe);
             return;
         }
 
-        retryCandidate(player, world, settings, attempts, attempt,
-                centerX, centerZ, 0.0D, minY, maxY, callback);
+        retry(player, world, settings, maxAttempts, attempt, callback);
     }
 
-    /**
-     * Solicita a geração/carregamento da chunk escolhida pelo RTP.
-     *
-     * A geração é feita pelo pipeline interno assíncrono de chunks do servidor.
-     * Nunca usamos getChunk(..., true) como fallback, porque essa chamada pode
-     * gerar a chunk de forma síncrona no thread principal e travar o servidor.
-     */
-    private void prepareChunkAsync(World world, int chunkX, int chunkZ,
-                                   java.util.function.Consumer<Boolean> callback) {
-        if (world.isChunkLoaded(chunkX, chunkZ)) {
-            callback.accept(true);
-            return;
-        }
+    private Location findSafeColumn(World world, Chunk chunk) {
+        ThreadLocalRandom random = ThreadLocalRandom.current();
+        int start = random.nextInt(256);
 
-        if (RtpChunkLoader.request(plugin, world, chunkX, chunkZ, callback)) {
-            return;
-        }
-
-        plugin.getLogger().warning("Pipeline assíncrono de chunks indisponível para RTP em "
-                + world.getName() + " (" + chunkX + "," + chunkZ + ").");
-        callback.accept(false);
-    }
-
-    private void retryCandidate(Player player, World world, WorldSettings settings, int attempts, int attempt,
-                                double centerX, double centerZ, double halfSize, int minY, int maxY,
-                                java.util.function.Consumer<Location> callback) {
-        int minRadius = Math.max(0, plugin.getConfig().getInt(
-                "rtp.mundos." + settings.id() + ".raio-minimo", 0));
-        int maxRadius = Math.max(minRadius + 1, plugin.getConfig().getInt(
-                "rtp.mundos." + settings.id() + ".raio-maximo",
-                (int) (world.getWorldBorder().getSize() / 2.0D)));
-
-        Bukkit.getScheduler().runTaskLater(plugin,
-                () -> findCandidate(player, world, settings, attempts, attempt + 1,
-                        centerX, centerZ, minRadius, maxRadius, minY, maxY, callback), 1L);
-    }
-
-    private Location analyzeChunkForSurface(World world, int chunkX, int chunkZ, int minY, int maxY) {
-        org.bukkit.Chunk chunk = world.getChunkAt(chunkX, chunkZ, false);
-        org.bukkit.ChunkSnapshot snapshot = chunk.getChunkSnapshot(true, false, false);
-
-        // Não varremos a chunk inteira. getHighestBlockYAt já fornece o topo
-        // não-ar da coluna; testar dezenas de colunas e somente os três blocos
-        // necessários mantém a validação barata no thread principal.
-        int start = ThreadLocalRandom.current().nextInt(256);
-        int worldMaxY = world.getMaxHeight();
-        int scanMinY = Math.max(world.getMinHeight(), minY);
-        int scanMaxY = Math.min(worldMaxY - 3, maxY);
-
-        int columnsToCheck = 32;
-        for (int offset = 0; offset < columnsToCheck; offset++) {
+        for (int offset = 0; offset < 256; offset++) {
             int index = (start + offset) & 255;
             int localX = index & 15;
             int localZ = index >> 4;
 
-            int highest = snapshot.getHighestBlockYAt(localX, localZ);
-            if (highest < scanMinY || highest > scanMaxY) continue;
+            int x = (chunk.getX() << 4) + localX;
+            int z = (chunk.getZ() << 4) + localZ;
+            int y = world.getHighestBlockYAt(x, z);
 
-            Material floor = snapshot.getBlockType(localX, highest, localZ);
-            Material feet = snapshot.getBlockType(localX, highest + 1, localZ);
-            Material head = snapshot.getBlockType(localX, highest + 2, localZ);
+            if (y < world.getMinHeight() || y + 2 >= world.getMaxHeight()) continue;
 
-            if (!isValidSurface(world.getEnvironment(), floor)) continue;
-            if (!isSafeMaterials(floor, feet, head)) continue;
+            Material floor = world.getBlockAt(x, y, z).getType();
+            Material feet = world.getBlockAt(x, y + 1, z).getType();
+            Material head = world.getBlockAt(x, y + 2, z).getType();
 
-            if (world.getEnvironment() == World.Environment.NETHER) {
-                boolean open = true;
-                for (int checkY = highest + 1; checkY <= highest + 8 && checkY < worldMaxY; checkY++) {
-                    if (!isAirLike(snapshot.getBlockType(localX, checkY, localZ))) {
-                        open = false;
-                        break;
-                    }
-                }
-                if (!open) continue;
-            }
+            // O RTP nunca coloca o jogador sobre água ou lava.
+            if (isLiquid(floor) || isLiquid(feet) || isLiquid(head)) continue;
 
-            return new Location(world,
-                    chunkX * 16 + localX + 0.5D,
-                    highest + 1.0D,
-                    chunkZ * 16 + localZ + 0.5D);
+            if (!floor.isSolid()) continue;
+            if (!feet.isAir() || !head.isAir()) continue;
+
+            return new Location(world, x + 0.5D, y + 1.0D, z + 0.5D);
         }
 
         return null;
     }
 
-    private boolean isValidSurface(World.Environment environment, Material material) {
-        if (material == null || material.isAir() || !material.isSolid()) return false;
+    private boolean isLiquid(Material material) {
+        return material == Material.WATER || material == Material.LAVA
+                || material.name().endsWith("_WATER");
+    }
 
-        String name = material.name();
-        if (name.equals("BEDROCK") || name.equals("BARRIER")) return false;
-        if (name.endsWith("_LEAVES") || name.equals("LEAVES") || name.equals("LEAVES_2")) return false;
-        if (name.endsWith("_LOG") || name.endsWith("_WOOD")) return false;
+    private void retry(Player player, World world, WorldSettings settings,
+                       int maxAttempts, int attempt, Consumer<Location> callback) {
+        Bukkit.getScheduler().runTaskLater(plugin,
+                () -> findChunk(player, world, settings, maxAttempts, attempt + 1, callback), 1L);
+    }
 
-        if (environment == World.Environment.NETHER) {
-            return isNetherSurface(material);
+    private void completeTeleport(Player player, WorldSettings settings, Location location) {
+        UUID uuid = player.getUniqueId();
+        clear(player);
+
+        if (plugin.getTitleManager() != null) {
+            plugin.getTitleManager().endRtpTitle(player);
+            plugin.getTitleManager().showBiomeAfterRtp(player, location);
         }
-        if (environment == World.Environment.THE_END) {
-            return material == Material.END_STONE;
+
+        cooldowns.put(uuid, System.currentTimeMillis() + cooldownSeconds(settings) * 1000L);
+        heatmap.merge(location.getWorld().getName(), 1L, Long::sum);
+    }
+
+    private void clear(Player player) {
+        UUID uuid = player.getUniqueId();
+        pendingWorlds.remove(uuid);
+        delays.remove(uuid);
+        if (plugin.getTitleManager() != null) {
+            plugin.getTitleManager().endRtpTitle(player);
         }
-
-        return true;
-    }
-
-    private boolean isNetherSurface(Material material) {
-        String name = material.name();
-        return name.equals("NETHERRACK")
-                || name.equals("CRIMSON_NYLIUM")
-                || name.equals("WARPED_NYLIUM")
-                || name.equals("SOUL_SAND")
-                || name.equals("SOUL_SOIL")
-                || name.equals("BLACKSTONE")
-                || name.equals("BASALT");
-    }
-
-    private boolean isSafeMaterials(Material floor, Material feet, Material head) {
-        List<String> blacklist = plugin.getConfig().getStringList("rtp.geral.blocos-bloqueados");
-        if (blacklist.contains(floor.name().toLowerCase(Locale.ROOT))
-                || blacklist.contains(feet.name().toLowerCase(Locale.ROOT))
-                || blacklist.contains(head.name().toLowerCase(Locale.ROOT))) return false;
-
-        return isSolid(floor) && isAirLike(feet) && isAirLike(head);
-    }
-
-    private boolean isSolid(Material material) {
-        return material.isSolid();
-    }
-
-    private boolean isAirLike(Material material) {
-        return material.isAir();
-    }
-
-    private double randomBetween(double min, double max) {
-        return ThreadLocalRandom.current().nextDouble(min, max);
     }
 
     private long cooldownSeconds(WorldSettings settings) {
-        return Math.max(0L, plugin.getConfig().getLong("rtp.mundos." + settings.id() + ".cooldown-segundos",
-                plugin.getConfig().getLong("rtp.geral.cooldown-segundos", 60L)));
+        return Math.max(0L, plugin.getConfig().getLong(
+                "rtp.mundos." + settings.id() + ".cooldown-segundos",
+                plugin.getConfig().getLong("rtp.geral.cooldown-segundos", 15L)));
     }
 
     private long cooldownRemaining(Player player) {
@@ -565,14 +297,21 @@ public final class RtpManager implements Listener {
 
     @EventHandler(priority = EventPriority.MONITOR)
     public void onMove(PlayerMoveEvent event) {
-        if (!plugin.getConfig().getBoolean("rtp.geral.cancelar-ao-mover", true)) return;
+        if (!plugin.getConfig().getBoolean("rtp.geral.cancelar-ao-mover", false)) return;
+        if (event.getTo() == null) return;
+
         if (event.getFrom().getBlockX() == event.getTo().getBlockX()
                 && event.getFrom().getBlockY() == event.getTo().getBlockY()
                 && event.getFrom().getBlockZ() == event.getTo().getBlockZ()) return;
+
         UUID uuid = event.getPlayer().getUniqueId();
         if (pendingWorlds.remove(uuid) != null) {
             delays.remove(uuid);
-            message(event.getPlayer(), "atraso-cancelado", "&cRTP cancelado porque você se moveu.", null, null);
+            message(event.getPlayer(), "atraso-cancelado",
+                    "&cRTP cancelado porque você se moveu.", null, null);
+            if (plugin.getTitleManager() != null) {
+                plugin.getTitleManager().endRtpTitle(event.getPlayer());
+            }
         }
     }
 
@@ -580,19 +319,16 @@ public final class RtpManager implements Listener {
     public void onQuit(PlayerQuitEvent event) {
         UUID uuid = event.getPlayer().getUniqueId();
         pendingWorlds.remove(uuid);
-        pendingLocations.remove(uuid);
         delays.remove(uuid);
-        delayExpired.remove(uuid);
-        pendingTeleport.remove(uuid);
-        processing.remove(uuid);
-
+        cooldowns.remove(uuid);
     }
 
-    private void message(Player player, String key, String fallback, String placeholder, String value) {
+    private void message(Player player, String key, String fallback,
+                          String placeholder, String value) {
         String message = plugin.getConfig().getString("mensagens." + key, fallback);
-        if (placeholder != null) message = message.replace("{" + placeholder + "}", value);
-        player.sendMessage(org.bukkit.ChatColor.translateAlternateColorCodes('&', message));
+        if (placeholder != null) {
+            message = message.replace("{" + placeholder + "}", value);
+        }
+        player.sendMessage(ChatColor.translateAlternateColorCodes('&', message));
     }
-
-    private record RtpRequest(UUID playerId, String worldId) {}
 }
