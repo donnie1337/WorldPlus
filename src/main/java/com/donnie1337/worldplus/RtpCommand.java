@@ -78,7 +78,7 @@ public final class RtpCommand implements CommandExecutor, TabCompleter, Listener
                 meta.setLore(List.of(
                         color("&7&l• &fTeleportação aleatória"),
                         color("&8"),
-                        color("&7Mundo: &f" + settings.name()),
+                        color("&7Mundo: &f" + displayWorldName(settings)),
                         color("&7Raio de exploração: &b" + raio + " blocos"),
                         color("&8"),
                         color("&a&lClique para teleportar"),
@@ -141,6 +141,19 @@ public final class RtpCommand implements CommandExecutor, TabCompleter, Listener
         List<String> values = new ArrayList<>(plugin.getWorlds().keySet());
         if (sender.hasPermission("worldplus.rtp.admin")) values.add("reload");
         return values.stream().filter(v -> v.toLowerCase().startsWith(args[0].toLowerCase())).sorted().toList();
+    }
+
+    private String displayWorldName(WorldSettings settings) {
+        if (settings.id().equalsIgnoreCase("overworld") || settings.name().equalsIgnoreCase("world")) {
+            return "Overworld";
+        }
+
+        String name = settings.name();
+        if (name == null || name.isBlank()) {
+            return settings.id();
+        }
+
+        return Character.toUpperCase(name.charAt(0)) + name.substring(1);
     }
 
     private String color(String message) {
