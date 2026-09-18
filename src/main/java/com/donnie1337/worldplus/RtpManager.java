@@ -71,7 +71,7 @@ public final class RtpManager implements Listener {
         if (delay > 0 && !player.hasPermission("worldplus.rtp.bypass.delay")) {
             pendingWorlds.put(player.getUniqueId(), settings.id());
             delays.put(player.getUniqueId(), System.currentTimeMillis() + delay * 1000L);
-            message(player, "atraso", "&bRTP em &f" + delay + "s&b. " + (cancelOnMove ? "Não se mova." : ""), null, null);
+            // O RTP usa somente title/subtitle durante o processo; não envia mensagem ao chat.
             Bukkit.getScheduler().runTaskLater(plugin, () -> {
                 String pending = pendingWorlds.remove(player.getUniqueId());
                 delays.remove(player.getUniqueId());
@@ -126,7 +126,7 @@ public final class RtpManager implements Listener {
         int attempts = Math.max(1, plugin.getConfig().getInt("rtp.geral.max-tentativas", 32));
         findSafeLocationAsync(player, rtpWorld, settings, attempts, safe -> {
             if (safe == null) {
-                message(player, "local-nao-encontrado", "&cNão foi possível encontrar um local seguro para o RTP.", null, null);
+                // Falha silenciosa no chat; o title permanece como feedback visual.
                 finish(player);
                 return;
             }
@@ -182,7 +182,7 @@ public final class RtpManager implements Listener {
             }
             cooldowns.put(uuid, System.currentTimeMillis() + cooldownSeconds(settings) * 1000L);
             heatmap.merge(world.getName(), 1L, Long::sum);
-            message(player, "teleportado", "&aTeleportado aleatoriamente para &f{id}&a.", "id", settings.id());
+            // Teleporte concluído sem mensagem no chat.
 
             releasePreloadTickets(world, tickets);
             preloadTickets.remove(uuid);
