@@ -110,8 +110,12 @@ public final class RtpManager implements Listener {
             return;
         }
 
+        // A referência usada pelo callback precisa ser final/efetivamente final.
+        // A variável world acima pode ser reatribuída durante o carregamento.
+        final World rtpWorld = world;
+
         int attempts = Math.max(1, plugin.getConfig().getInt("rtp.geral.max-tentativas", 32));
-        findSafeLocationAsync(player, world, settings, attempts, safe -> {
+        findSafeLocationAsync(player, rtpWorld, settings, attempts, safe -> {
             if (safe == null) {
                 message(player, "local-nao-encontrado", "&cNão foi possível encontrar um local seguro para o RTP.", null, null);
                 finish(player);
@@ -120,7 +124,7 @@ public final class RtpManager implements Listener {
 
             player.teleport(safe);
             cooldowns.put(player.getUniqueId(), System.currentTimeMillis() + cooldownSeconds(settings) * 1000L);
-            heatmap.merge(world.getName(), 1L, Long::sum);
+            heatmap.merge(rtpWorld.getName(), 1L, Long::sum);
             message(player, "teleportado", "&aTeleportado aleatoriamente para &f{id}&a.", "id", settings.id());
             finish(player);
         });
