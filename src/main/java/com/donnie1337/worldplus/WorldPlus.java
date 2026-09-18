@@ -46,8 +46,7 @@ public final class WorldPlus extends JavaPlugin {
         if (getConfig().getBoolean("configuracao.criar-mundos-automaticamente", true)) {
             for (WorldSettings settings : worlds.values()) createOrLoadWorld(settings);
         }
-        getServer().getPluginManager().registerEvents(new WorldPortalListener(this), this);
-        getLogger().info("WorldPlus: portais de Nether e End conectados.");
+        getLogger().info("WorldPlus: portais de Nether e End configurados.");
         getLogger().info("WorldPlus ativado.");
     }
 
