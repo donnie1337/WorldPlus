@@ -285,7 +285,6 @@ public final class WorldCommand implements CommandExecutor, TabCompleter {
 
                     if (!floor.isSolid() || floor == Material.BEDROCK) continue;
                     if (!isSafeAir(feet) || !isSafeAir(head)) continue;
-                    if (feet.isLiquid() || head.isLiquid()) continue;
 
                     return new Location(world, blockX + 0.5D, y + 1.0D, blockZ + 0.5D);
                 }
