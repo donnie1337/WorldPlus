@@ -3,6 +3,7 @@ package com.donnie1337.worldplus;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.Chunk;
+import org.bukkit.ChunkSnapshot;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.World;
@@ -203,21 +204,36 @@ public final class RtpManager implements Listener {
     private void inspectLoadedChunk(Player player, World world, WorldSettings settings,
                                     int maxAttempts, int attempt, Chunk chunk,
                                     Consumer<Location> callback) {
-        Location safe = findSafeColumn(world, chunk);
-        if (safe != null) {
-            callback.accept(safe);
-            return;
-        }
+        // O snapshot é criado uma única vez na thread principal e todo o trabalho
+        // pesado de leitura/procura é feito fora dela. ChunkSnapshot é thread-safe
+        // por definição da API do Spigot.
+        ChunkSnapshot snapshot = chunk.getChunkSnapshot(true, false, false);
 
-        retry(player, world, settings, maxAttempts, attempt, callback);
+        Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
+            Location safe = findSafeColumn(world, snapshot);
+
+            Bukkit.getScheduler().runTask(plugin, () -> {
+                if (!player.isOnline()) {
+                    callback.accept(null);
+                    return;
+                }
+
+                if (safe != null) {
+                    callback.accept(safe);
+                    return;
+                }
+
+                retry(player, world, settings, maxAttempts, attempt, callback);
+            });
+        });
     }
 
-    private Location findSafeColumn(World world, Chunk chunk) {
+    private Location findSafeColumn(World world, ChunkSnapshot snapshot) {
         ThreadLocalRandom random = ThreadLocalRandom.current();
         boolean nether = world.getEnvironment() == World.Environment.NETHER;
 
-        // Limita a procura a uma quantidade pequena de colunas para evitar
-        // milhares de chamadas à API durante o RTP.
+        // A busca é feita no snapshot, não através de World#getBlockAt.
+        // Isso evita centenas/milhares de acessos ao mundo na thread principal.
         int columnsToCheck = nether ? 48 : 64;
         int start = random.nextInt(256);
 
@@ -226,51 +242,55 @@ public final class RtpManager implements Listener {
             int localX = index & 15;
             int localZ = index >> 4;
 
-            int x = (chunk.getX() << 4) + localX;
-            int z = (chunk.getZ() << 4) + localZ;
-
+            int y;
             if (nether) {
-                // No Nether, começa abaixo do teto de bedrock e desce apenas
-                // o necessário para encontrar uma coluna realmente segura.
                 int maxY = Math.min(world.getMaxHeight() - 3, 125);
                 int minY = Math.max(world.getMinHeight(), 1);
-
-                for (int y = maxY; y >= minY; y--) {
-                    Material floor = world.getBlockAt(x, y, z).getType();
-                    if (floor == Material.BEDROCK || isLiquid(floor) || !floor.isSolid()) {
-                        continue;
-                    }
-
-                    Material feet = world.getBlockAt(x, y + 1, z).getType();
-                    Material head = world.getBlockAt(x, y + 2, z).getType();
-
-                    if (floor == Material.BEDROCK
-                            || isLiquid(feet) || isLiquid(head)
-                            || !feet.isAir() || !head.isAir()) {
-                        continue;
-                    }
-
-                    return new Location(world, x + 0.5D, y + 1.0D, z + 0.5D);
-                }
-
-                continue;
+                y = findNetherSafeY(snapshot, localX, localZ, maxY, minY);
+            } else {
+                y = snapshot.getHighestBlockYAt(localX, localZ);
             }
 
-            int y = world.getHighestBlockYAt(x, z);
             if (y < world.getMinHeight() || y + 2 >= world.getMaxHeight()) continue;
 
-            Material floor = world.getBlockAt(x, y, z).getType();
-            Material feet = world.getBlockAt(x, y + 1, z).getType();
-            Material head = world.getBlockAt(x, y + 2, z).getType();
+            Material floor = snapshot.getBlockType(localX, y, localZ);
+            Material feet = snapshot.getBlockType(localX, y + 1, localZ);
+            Material head = snapshot.getBlockType(localX, y + 2, localZ);
 
+            if (floor == Material.BEDROCK) continue;
             if (isLiquid(floor) || isLiquid(feet) || isLiquid(head)) continue;
             if (!floor.isSolid()) continue;
             if (!feet.isAir() || !head.isAir()) continue;
 
+            int x = (snapshot.getX() << 4) + localX;
+            int z = (snapshot.getZ() << 4) + localZ;
             return new Location(world, x + 0.5D, y + 1.0D, z + 0.5D);
         }
 
         return null;
+    }
+
+    private int findNetherSafeY(ChunkSnapshot snapshot, int localX, int localZ,
+                                int maxY, int minY) {
+        for (int y = maxY; y >= minY; y--) {
+            Material floor = snapshot.getBlockType(localX, y, localZ);
+            if (floor == Material.BEDROCK || isLiquid(floor) || !floor.isSolid()) {
+                continue;
+            }
+
+            Material feet = snapshot.getBlockType(localX, y + 1, localZ);
+            Material head = snapshot.getBlockType(localX, y + 2, localZ);
+
+            if (floor == Material.BEDROCK
+                    || isLiquid(feet) || isLiquid(head)
+                    || !feet.isAir() || !head.isAir()) {
+                continue;
+            }
+
+            return y;
+        }
+
+        return Integer.MIN_VALUE;
     }
 
     private boolean isLiquid(Material material) {
