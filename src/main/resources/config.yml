@@ -51,7 +51,7 @@ mundos:
     ambiente: "THE_END"
     seed: 731946205817394602
     tamanho: 7000
-    estruturas: true
+    estruturas: false
     remover-strongholds: false
     remover-dragao: true
     remover-torres: true
