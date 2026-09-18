@@ -126,7 +126,7 @@ public final class RtpManager implements Listener {
         int attempts = Math.max(1, plugin.getConfig().getInt("rtp.geral.max-tentativas", 32));
         findSafeLocationAsync(player, rtpWorld, settings, attempts, safe -> {
             if (safe == null) {
-                // Falha silenciosa no chat; o title permanece como feedback visual.
+                message(player, "local-nao-encontrado", "&cNão foi possível encontrar um local seguro para o RTP.", null, null);
                 finish(player);
                 return;
             }
