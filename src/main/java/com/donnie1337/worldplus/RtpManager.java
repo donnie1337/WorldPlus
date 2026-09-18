@@ -13,8 +13,6 @@ import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.scheduler.BukkitTask;
 
 import java.util.*;
-import java.lang.reflect.Method;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ThreadLocalRandom;
 
 public final class RtpManager implements Listener {
@@ -205,7 +203,9 @@ public final class RtpManager implements Listener {
 
     private void finish(Player player) {
         processing.remove(player.getUniqueId());
-        Bukkit.getScheduler().runTask(plugin, this::processNext);
+        if (plugin.isEnabled()) {
+            Bukkit.getScheduler().runTask(plugin, this::processNext);
+        }
     }
 
     private void findSafeLocationAsync(Player player, World world, WorldSettings settings, int attempts,
@@ -279,7 +279,7 @@ public final class RtpManager implements Listener {
         // somente depois que a CompletableFuture terminar.
         if (!world.isChunkGenerated(chunkX, chunkZ)) {
             final int nextAttempt = attempt + 1;
-            requestChunkGenerationAsync(world, chunkX, chunkZ, generated -> {
+            requestChunkGenerationAsync(player, world, chunkX, chunkZ, generated -> {
                 if (!player.isOnline()) {
                     callback.accept(null);
                     return;
@@ -325,47 +325,72 @@ public final class RtpManager implements Listener {
         }
     }
 
-    private void requestChunkGenerationAsync(World world, int chunkX, int chunkZ,
+    private void requestChunkGenerationAsync(Player player, World world, int chunkX, int chunkZ,
                                                java.util.function.Consumer<Boolean> callback) {
+        if (!plugin.isEnabled() || !player.isOnline()) {
+            callback.accept(false);
+            return;
+        }
+
+        // Não chamamos ServerChunkCache#getChunkFuture diretamente. Em Spigot 26.2
+        // essa chamada pode entrar em managedBlock no thread principal enquanto a
+        // geração ainda aguarda tarefas do pipeline, exatamente o que apareceu no
+        // watchdog em ServerChunkCache.getChunkFuture.
+        //
+        // O caminho Bukkit seguro aqui é registrar um plugin ticket e deixar o
+        // servidor avançar a geração naturalmente entre ticks. Depois verificamos
+        // isChunkGenerated sem forçar getChunkAt(..., true).
+        final int maxPolls = 200; // até 20 segundos por tentativa de chunk
         try {
-            Method getHandle = world.getClass().getMethod("getHandle");
-            Object serverLevel = getHandle.invoke(world);
-
-            Method getChunkSource = serverLevel.getClass().getMethod("getChunkSource");
-            Object chunkSource = getChunkSource.invoke(serverLevel);
-
-            Class<?> chunkStatusClass = Class.forName("net.minecraft.world.level.chunk.status.ChunkStatus");
-            Object fullStatus = chunkStatusClass.getField("FULL").get(null);
-
-            Method getChunkFuture = chunkSource.getClass().getMethod(
-                    "getChunkFuture",
-                    int.class,
-                    int.class,
-                    chunkStatusClass,
-                    boolean.class
-            );
-
-            Object result = getChunkFuture.invoke(chunkSource, chunkX, chunkZ, fullStatus, true);
-            if (!(result instanceof CompletableFuture<?> future)) {
-                throw new IllegalStateException("O pipeline de chunks não retornou CompletableFuture.");
+            boolean ticketAdded = world.addPluginChunkTicket(chunkX, chunkZ, plugin);
+            if (!ticketAdded && !world.isChunkLoaded(chunkX, chunkZ)) {
+                Bukkit.getScheduler().runTaskLater(plugin,
+                        () -> requestChunkGenerationAsync(player, world, chunkX, chunkZ, callback), 2L);
+                return;
             }
 
-            future.whenComplete((ignored, throwable) -> Bukkit.getScheduler().runTask(plugin, () -> {
-                if (throwable != null) {
-                    plugin.getLogger().warning("Falha na geração assíncrona da chunk do RTP em "
-                            + chunkX + "," + chunkZ + " no mundo " + world.getName()
-                            + ": " + throwable.getMessage());
-                    callback.accept(false);
-                    return;
-                }
-
-                callback.accept(world.isChunkGenerated(chunkX, chunkZ));
-            }));
+            pollGeneratedChunk(player, world, chunkX, chunkZ, 0, maxPolls, callback);
         } catch (Throwable throwable) {
-            plugin.getLogger().warning("Não foi possível solicitar a geração assíncrona da chunk do RTP em "
-                    + chunkX + "," + chunkZ + " no mundo " + world.getName()
-                    + ": " + throwable.getMessage());
-            Bukkit.getScheduler().runTask(plugin, () -> callback.accept(false));
+            if (plugin.isEnabled()) {
+                plugin.getLogger().warning("Não foi possível iniciar a geração da chunk do RTP em "
+                        + chunkX + "," + chunkZ + " no mundo " + world.getName()
+                        + ": " + throwable.getMessage());
+            }
+            callback.accept(false);
+        }
+    }
+
+    private void pollGeneratedChunk(Player player, World world, int chunkX, int chunkZ,
+                                     int poll, int maxPolls,
+                                     java.util.function.Consumer<Boolean> callback) {
+        if (!plugin.isEnabled() || !player.isOnline()) {
+            releaseGenerationTicket(world, chunkX, chunkZ);
+            callback.accept(false);
+            return;
+        }
+
+        if (world.isChunkGenerated(chunkX, chunkZ)) {
+            callback.accept(true);
+            releaseGenerationTicket(world, chunkX, chunkZ);
+            return;
+        }
+
+        if (poll >= maxPolls) {
+            releaseGenerationTicket(world, chunkX, chunkZ);
+            callback.accept(false);
+            return;
+        }
+
+        Bukkit.getScheduler().runTaskLater(plugin,
+                () -> pollGeneratedChunk(player, world, chunkX, chunkZ,
+                        poll + 1, maxPolls, callback), 2L);
+    }
+
+    private void releaseGenerationTicket(World world, int chunkX, int chunkZ) {
+        if (!plugin.isEnabled()) return;
+        try {
+            world.removePluginChunkTicket(chunkX, chunkZ, plugin);
+        } catch (Throwable ignored) {
         }
     }
 
