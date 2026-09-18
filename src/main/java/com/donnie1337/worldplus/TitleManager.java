@@ -94,7 +94,7 @@ public final class TitleManager implements Listener {
     }
 
     private String displayName(Biome biome) {
-        String configured = plugin.getConfig().getString("titles.biomas." + biome.getKey().getKey());
+        String configured = plugin.getConfig().getString("titles.biomas." + biome.getKey().getKey() + ".nome");
         if (configured != null && !configured.isBlank()) return color(configured);
 
         String raw = biome.getKey().getKey().replace('_', ' ').toLowerCase(Locale.ROOT);
@@ -108,10 +108,10 @@ public final class TitleManager implements Listener {
     }
 
     private String article(Biome biome) {
-        String configured = plugin.getConfig().getString("titles.artigos." + biome.getKey().getKey());
+        String configured = plugin.getConfig().getString("titles.biomas." + biome.getKey().getKey() + ".artigo");
         if (configured != null && !configured.isBlank()) return configured;
 
-        return plugin.getConfig().getString("titles.artigo-padrao", "no");
+        return plugin.getConfig().getString("titles.bioma.padrao.artigo", "no");
     }
 
     private String color(String text) {
