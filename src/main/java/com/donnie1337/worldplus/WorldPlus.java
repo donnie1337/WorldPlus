@@ -2,10 +2,13 @@ package com.donnie1337.worldplus;
 
 import org.bukkit.Bukkit;
 import org.bukkit.Difficulty;
+import org.bukkit.Material;
 import org.bukkit.GameRule;
 import org.bukkit.World;
 import org.bukkit.WorldCreator;
 import org.bukkit.WorldBorder;
+import org.bukkit.entity.EnderDragon;
+import org.bukkit.entity.EntityType;
 import org.bukkit.command.PluginCommand;
 import org.bukkit.plugin.java.JavaPlugin;
 
@@ -74,6 +77,9 @@ public final class WorldPlus extends JavaPlugin {
             double size = getConfig().getDouble(path + ".tamanho", 10000D);
             boolean structures = getConfig().getBoolean(path + ".estruturas", true);
             boolean removeStrongholds = getConfig().getBoolean(path + ".remover-strongholds", false);
+            boolean removeEndDragon = getConfig().getBoolean(path + ".remover-dragao", false);
+            boolean removeEndTowers = getConfig().getBoolean(path + ".remover-torres", false);
+            boolean removeEndBedrock = getConfig().getBoolean(path + ".remover-bedrock", false);
             boolean pvp = getConfig().getBoolean(path + ".pvp", true);
             boolean keepInventory = getConfig().getBoolean(path + ".manter-inventario", true);
             Difficulty difficulty = parseDifficulty(getConfig().getString(path + ".dificuldade", "NORMAL"));
@@ -90,8 +96,8 @@ public final class WorldPlus extends JavaPlugin {
                 continue;
             }
             worlds.put(id.toLowerCase(), new WorldSettings(id.toLowerCase(), name, environment, seed, size,
-                    structures, removeStrongholds, pvp, keepInventory, difficulty, customSpawn,
-                    spawnX, spawnY, spawnZ, spawnYaw, spawnPitch));
+                    structures, removeStrongholds, removeEndDragon, removeEndTowers, removeEndBedrock,
+                    pvp, keepInventory, difficulty, customSpawn, spawnX, spawnY, spawnZ, spawnYaw, spawnPitch));
         }
     }
 
@@ -131,10 +137,57 @@ public final class WorldPlus extends JavaPlugin {
         World world = creator.createWorld();
         if (world != null) {
             applySettings(world, settings);
+            if (world.getEnvironment() == World.Environment.THE_END) {
+                configureEnd(world, settings);
+            }
             if (getConfig().getBoolean("configuracao.mensagem-console", true))
                 getLogger().info("Mundo carregado: " + settings.id() + " -> " + settings.name());
         }
         return world;
+    }
+
+    private void configureEnd(World world, WorldSettings settings) {
+        if (!settings.removeEndDragon() && !settings.removeEndTowers() && !settings.removeEndBedrock()) {
+            return;
+        }
+
+        if (settings.removeEndDragon()) {
+            if (world.getEnderDragonBattle() != null) {
+                world.getEnderDragonBattle().setPreviouslyKilled(true);
+            }
+            for (var entity : world.getEntities()) {
+                if (entity instanceof EnderDragon || entity.getType() == EntityType.ENDER_CRYSTAL) {
+                    entity.remove();
+                }
+            }
+        }
+
+        if (settings.removeEndTowers() || settings.removeEndBedrock()) {
+            final int radius = 128;
+            final int minY = Math.max(world.getMinHeight(), 0);
+            final int maxY = Math.min(world.getMaxHeight() - 1, 128);
+
+            for (int chunkX = -8; chunkX <= 8; chunkX++) {
+                for (int chunkZ = -8; chunkZ <= 8; chunkZ++) {
+                    var chunk = world.getChunkAt(chunkX, chunkZ);
+                    for (int x = chunk.getX() * 16; x < chunk.getX() * 16 + 16; x++) {
+                        for (int z = chunk.getZ() * 16; z < chunk.getZ() * 16 + 16; z++) {
+                            if ((long) x * x + (long) z * z > (long) radius * radius) continue;
+                            for (int y = minY; y <= maxY; y++) {
+                                var block = world.getBlockAt(x, y, z);
+                                Material material = block.getType();
+                                if ((settings.removeEndTowers() && material == Material.OBSIDIAN)
+                                        || (settings.removeEndBedrock() && material == Material.BEDROCK)) {
+                                    block.setType(Material.AIR, false);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        world.save();
     }
 
     public void applySettings(World world, WorldSettings settings) {
@@ -157,8 +210,9 @@ public final class WorldPlus extends JavaPlugin {
         getConfig().set("mundos." + settings.id() + ".spawn.pitch", location.getPitch());
         saveConfig();
         WorldSettings updated = new WorldSettings(settings.id(), settings.name(), settings.environment(), settings.seed(),
-                settings.size(), settings.structures(), settings.removeStrongholds(), settings.pvp(),
-                settings.keepInventory(), settings.difficulty(), true, location.getBlockX(), location.getBlockY(),
+                settings.size(), settings.structures(), settings.removeStrongholds(), settings.removeEndDragon(),
+                settings.removeEndTowers(), settings.removeEndBedrock(), settings.pvp(), settings.keepInventory(),
+                settings.difficulty(), true, location.getBlockX(), location.getBlockY(),
                 location.getBlockZ(), location.getYaw(), location.getPitch());
         worlds.put(settings.id(), updated);
         world.setSpawnLocation(location.getBlockX(), location.getBlockY(), location.getBlockZ(), location.getYaw());
