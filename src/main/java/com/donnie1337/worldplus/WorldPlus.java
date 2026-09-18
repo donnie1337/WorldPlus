@@ -23,6 +23,7 @@ import java.util.Map;
 
 public final class WorldPlus extends JavaPlugin {
     private final Map<String, WorldSettings> worlds = new LinkedHashMap<>();
+    private TitleManager titleManager;
 
     @Override
     public void onLoad() {
@@ -50,6 +51,7 @@ public final class WorldPlus extends JavaPlugin {
         if (getConfig().getBoolean("configuracao.criar-mundos-automaticamente", true)) {
             for (WorldSettings settings : worlds.values()) createOrLoadWorld(settings);
         }
+        titleManager = new TitleManager(this);
         RtpManager rtpManager = new RtpManager(this);
         RtpCommand rtpCommand = new RtpCommand(this, rtpManager);
         PluginCommand rtp = getCommand("rtp");
@@ -57,6 +59,7 @@ public final class WorldPlus extends JavaPlugin {
             rtp.setExecutor(rtpCommand);
             rtp.setTabCompleter(rtpCommand);
         }
+        getServer().getPluginManager().registerEvents(titleManager, this);
         getServer().getPluginManager().registerEvents(rtpManager, this);
         getServer().getPluginManager().registerEvents(rtpCommand, this);
         getLogger().info("WorldPlus: portais de Nether e End configurados.");
@@ -111,6 +114,10 @@ public final class WorldPlus extends JavaPlugin {
     }
 
     public Map<String, WorldSettings> getWorlds() { return worlds; }
+
+    public TitleManager getTitleManager() {
+        return titleManager;
+    }
 
     public World getDimensionWorld(String id, World.Environment environment) {
         WorldSettings settings = getSettings(id);
