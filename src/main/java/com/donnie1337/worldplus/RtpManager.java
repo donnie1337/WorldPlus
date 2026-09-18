@@ -61,8 +61,6 @@ public final class RtpManager implements Listener {
         }
 
         int delay = plugin.getConfig().getInt("rtp.geral.atraso-segundos", 5);
-        boolean cancelOnMove = plugin.getConfig().getBoolean("rtp.geral.cancelar-ao-mover", true);
-
         // O atraso é o único período de espera do RTP. Durante esses segundos,
         // a coordenada já é sorteada e a única chunk do candidato é preparada.
         // Quando o contador termina, o jogador não espera mais nada: se a chunk
@@ -194,6 +192,20 @@ public final class RtpManager implements Listener {
 
     private void teleportReady(Player player, WorldSettings settings, Location location, World world) {
         UUID uuid = player.getUniqueId();
+        teleportAttempt(player, settings, location, world, 0);
+    }
+
+    private void teleportAttempt(Player player, WorldSettings settings, Location location, World world, int attempt) {
+        UUID uuid = player.getUniqueId();
+
+        if (!player.isOnline()) {
+            pendingTeleport.remove(uuid);
+            pendingWorlds.remove(uuid);
+            pendingLocations.remove(uuid);
+            delayExpired.remove(uuid);
+            finish(player);
+            return;
+        }
 
         Bukkit.getScheduler().runTask(plugin, () -> {
             if (!player.isOnline()) {
@@ -205,52 +217,82 @@ public final class RtpManager implements Listener {
                 return;
             }
 
-            // Garante que a chunk usada para a posição continua carregada antes
-            // de entregar o jogador ao destino.
-            int chunkX = location.getBlockX() >> 4;
-            int chunkZ = location.getBlockZ() >> 4;
             try {
+                int chunkX = location.getBlockX() >> 4;
+                int chunkZ = location.getBlockZ() >> 4;
+
+                // O destino já foi validado. Garantimos novamente que a única
+                // chunk do destino está carregada antes da transferência.
                 if (!world.isChunkLoaded(chunkX, chunkZ)) {
-                    world.loadChunk(chunkX, chunkZ, true);
+                    if (!world.loadChunk(chunkX, chunkZ, true)) {
+                        throw new IllegalStateException("A chunk de destino não pôde ser carregada.");
+                    }
                 }
 
-                boolean success = player.teleport(location, org.bukkit.event.player.PlayerTeleportEvent.TeleportCause.PLUGIN);
-                if (!success) {
-                    // Uma tentativa adicional no tick seguinte cobre cancelamentos
-                    // transitórios do ciclo de teleporte sem criar outro atraso de RTP.
-                    Bukkit.getScheduler().runTask(plugin, () -> {
-                        if (!player.isOnline()) {
-                            pendingTeleport.remove(uuid);
-                            pendingWorlds.remove(uuid);
-                            pendingLocations.remove(uuid);
-                            delayExpired.remove(uuid);
-                            finish(player);
-                            return;
-                        }
+                boolean accepted = player.teleport(
+                        location,
+                        org.bukkit.event.player.PlayerTeleportEvent.TeleportCause.PLUGIN
+                );
 
-                        boolean retrySuccess = player.teleport(location, org.bukkit.event.player.PlayerTeleportEvent.TeleportCause.PLUGIN);
-                        if (retrySuccess) {
-                            completeTeleport(player, settings, location, world);
-                        } else {
-                            message(player, "local-nao-encontrado", "&cNão foi possível concluir o teleporte para o local preparado.", null, null);
-                            pendingTeleport.remove(uuid);
-                            pendingWorlds.remove(uuid);
-                            pendingLocations.remove(uuid);
-                            delayExpired.remove(uuid);
-                            finish(player);
-                        }
-                    });
+                // Não consideramos o RTP concluído só porque a API aceitou a chamada.
+                // O próximo tick confirma que o jogador realmente chegou ao destino.
+                Bukkit.getScheduler().runTaskLater(plugin, () -> {
+                    if (!player.isOnline()) {
+                        pendingTeleport.remove(uuid);
+                        pendingWorlds.remove(uuid);
+                        pendingLocations.remove(uuid);
+                        delayExpired.remove(uuid);
+                        finish(player);
+                        return;
+                    }
+
+                    Location current = player.getLocation();
+                    boolean arrived = current.getWorld() != null
+                            && current.getWorld().getUID().equals(world.getUID())
+                            && current.distanceSquared(location) <= 1.0D;
+
+                    if (accepted && arrived) {
+                        completeTeleport(player, settings, location, world);
+                        return;
+                    }
+
+                    if (attempt < 5) {
+                        // Alguns ciclos de plugins/teleportação podem processar o
+                        // PlayerTeleportEvent depois da primeira chamada. Repetimos
+                        // no tick seguinte sem iniciar novo delay de RTP.
+                        teleportAttempt(player, settings, location, world, attempt + 1);
+                        return;
+                    }
+
+                    plugin.getLogger().warning(
+                            "RTP não confirmou a chegada de " + player.getName()
+                                    + " ao destino " + location.getBlockX() + ","
+                                    + location.getBlockY() + "," + location.getBlockZ()
+                                    + " após " + (attempt + 1) + " tentativas."
+                    );
+                    pendingTeleport.remove(uuid);
+                    pendingWorlds.remove(uuid);
+                    pendingLocations.remove(uuid);
+                    delayExpired.remove(uuid);
+                    message(player, "local-nao-encontrado",
+                            "&cNão foi possível concluir o teleporte para o local preparado.", null, null);
+                    finish(player);
+                }, 1L);
+            } catch (Throwable throwable) {
+                if (attempt < 5) {
+                    Bukkit.getScheduler().runTaskLater(plugin,
+                            () -> teleportAttempt(player, settings, location, world, attempt + 1), 1L);
                     return;
                 }
 
-                completeTeleport(player, settings, location, world);
-            } catch (Throwable throwable) {
-                plugin.getLogger().warning("Falha ao teleportar jogador para o RTP: " + throwable.getMessage());
-                message(player, "local-nao-encontrado", "&cNão foi possível concluir o teleporte para o local preparado.", null, null);
+                plugin.getLogger().warning("Falha ao teleportar jogador para o RTP: "
+                        + throwable.getMessage());
                 pendingTeleport.remove(uuid);
                 pendingWorlds.remove(uuid);
                 pendingLocations.remove(uuid);
                 delayExpired.remove(uuid);
+                message(player, "local-nao-encontrado",
+                        "&cNão foi possível concluir o teleporte para o local preparado.", null, null);
                 finish(player);
             }
         });
@@ -359,76 +401,67 @@ public final class RtpManager implements Listener {
         org.bukkit.ChunkSnapshot snapshot = chunk.getChunkSnapshot(true, false, false);
 
         int start = ThreadLocalRandom.current().nextInt(256);
+        int worldMaxY = world.getMaxHeight();
+        int scanMinY = Math.max(world.getMinHeight(), minY);
+        int scanMaxY = Math.min(worldMaxY - 3, maxY);
 
-        // O snapshot já informa o maior bloco não-ar de cada coluna.
-        // Limitamos a análise a 64 colunas para não fazer uma varredura pesada
-        // no thread principal. Como o candidato precisa ser o maior bloco não-ar
-        // e os dois blocos acima precisam ser ar, teto de caverna não passa.
-        for (int offset = 0; offset < 64; offset++) {
+        // Inspirado no RandomTP: a coluna sorteada é procurada de cima para baixo.
+        // Diferente da implementação anterior, não dependemos de uma lista pequena
+        // de blocos de superfície. Stone/deepslate e outros blocos naturais sólidos
+        // também podem ser terreno válido.
+        for (int offset = 0; offset < 256; offset++) {
             int index = (start + offset) & 255;
             int localX = index & 15;
             int localZ = index >> 4;
 
             int highest = snapshot.getHighestBlockYAt(localX, localZ);
-            int worldMaxY = world.getMaxHeight();
-            if (highest < minY || highest >= maxY) continue;
-            if (highest < world.getMinHeight() || highest + 2 >= worldMaxY) continue;
+            int y = Math.min(highest, scanMaxY);
 
-            Material floor = snapshot.getBlockType(localX, highest, localZ);
-            Material feet = snapshot.getBlockType(localX, highest + 1, localZ);
-            Material head = snapshot.getBlockType(localX, highest + 2, localZ);
+            for (; y >= scanMinY; y--) {
+                Material floor = snapshot.getBlockType(localX, y, localZ);
+                Material feet = snapshot.getBlockType(localX, y + 1, localZ);
+                Material head = snapshot.getBlockType(localX, y + 2, localZ);
 
-            if (!isValidSurface(world.getEnvironment(), floor)) continue;
-            if (!isSafeMaterials(floor, feet, head)) continue;
+                if (!isValidSurface(world.getEnvironment(), floor)) continue;
+                if (!isSafeMaterials(floor, feet, head)) continue;
 
-            if (world.getEnvironment() == World.Environment.NETHER) {
-                boolean open = true;
-                for (int y = highest + 1; y <= highest + 8 && y < maxY; y++) {
-                    if (!isAirLike(snapshot.getBlockType(localX, y, localZ))) {
-                        open = false;
-                        break;
+                if (world.getEnvironment() == World.Environment.NETHER) {
+                    boolean open = true;
+                    for (int checkY = y + 1; checkY <= y + 8 && checkY < worldMaxY; checkY++) {
+                        if (!isAirLike(snapshot.getBlockType(localX, checkY, localZ))) {
+                            open = false;
+                            break;
+                        }
                     }
+                    if (!open) continue;
                 }
-                if (!open) continue;
-            }
 
-            return new Location(world,
-                    chunkX * 16 + localX + 0.5D,
-                    highest + 1.0D,
-                    chunkZ * 16 + localZ + 0.5D);
+                return new Location(world,
+                        chunkX * 16 + localX + 0.5D,
+                        y + 1.0D,
+                        chunkZ * 16 + localZ + 0.5D);
+            }
         }
 
         return null;
     }
 
     private boolean isValidSurface(World.Environment environment, Material material) {
-        if (material == null || material.isAir()) return false;
+        if (material == null || material.isAir() || !material.isSolid()) return false;
 
-        return switch (environment) {
-            case NORMAL -> isOverworldSurface(material);
-            case NETHER -> isNetherSurface(material);
-            case THE_END -> material == Material.END_STONE;
-            default -> false;
-        };
-    }
-
-    private boolean isOverworldSurface(Material material) {
         String name = material.name();
-        return name.equals("GRASS_BLOCK")
-                || name.equals("DIRT")
-                || name.equals("COARSE_DIRT")
-                || name.equals("ROOTED_DIRT")
-                || name.equals("PODZOL")
-                || name.equals("MYCELIUM")
-                || name.equals("SAND")
-                || name.equals("RED_SAND")
-                || name.equals("GRAVEL")
-                || name.equals("CLAY")
-                || name.equals("MOSS_BLOCK")
-                || name.equals("SNOW_BLOCK")
-                || name.equals("MUD")
-                || name.equals("PACKED_MUD")
-                || name.endsWith("_LEAVES");
+        if (name.equals("BEDROCK") || name.equals("BARRIER")) return false;
+        if (name.endsWith("_LEAVES") || name.equals("LEAVES") || name.equals("LEAVES_2")) return false;
+        if (name.endsWith("_LOG") || name.endsWith("_WOOD")) return false;
+
+        if (environment == World.Environment.NETHER) {
+            return isNetherSurface(material);
+        }
+        if (environment == World.Environment.THE_END) {
+            return material == Material.END_STONE;
+        }
+
+        return true;
     }
 
     private boolean isNetherSurface(Material material) {
