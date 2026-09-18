@@ -334,89 +334,75 @@ public final class RtpManager implements Listener {
 
     private void findSafeLocationAsync(Player player, World world, WorldSettings settings, int attempts,
                                        java.util.function.Consumer<Location> callback) {
-        org.bukkit.WorldBorder border = world.getWorldBorder();
-        Location borderCenter = border.getCenter();
+        int minRadius = Math.max(0, plugin.getConfig().getInt(
+                "rtp.mundos." + settings.id() + ".raio-minimo", 0));
+        int maxRadius = Math.max(minRadius + 1, plugin.getConfig().getInt(
+                "rtp.mundos." + settings.id() + ".raio-maximo",
+                (int) (world.getWorldBorder().getSize() / 2.0D)));
 
-        // O sorteio usa toda a área útil da WorldBorder.
-        double halfSize = Math.max(1.0D, border.getSize() / 2.0D - 16.0D);
-        double centerX = borderCenter.getX();
-        double centerZ = borderCenter.getZ();
+        double centerX = plugin.getConfig().getDouble(
+                "rtp.mundos." + settings.id() + ".centro-x",
+                world.getWorldBorder().getCenter().getX());
+        double centerZ = plugin.getConfig().getDouble(
+                "rtp.mundos." + settings.id() + ".centro-z",
+                world.getWorldBorder().getCenter().getZ());
 
         int minY = plugin.getConfig().getInt("rtp.mundos." + settings.id() + ".y-minimo", 0);
         int maxY = plugin.getConfig().getInt("rtp.mundos." + settings.id() + ".y-maximo", 320);
 
-        findCandidate(player, world, settings, attempts, 0, centerX, centerZ, halfSize, minY, maxY, callback);
+        // O RTP só atende quando a área configurada já foi pré-gerada.
+        // A pré-geração acontece automaticamente pelo WorldPlus e salva as chunks
+        // no disco. Assim, /rtp nunca precisa gerar terreno no momento do comando.
+        RtpPreGenerator preGenerator = plugin.getRtpPreGenerator();
+        if (preGenerator != null && !preGenerator.isReady(settings.id())) {
+            Bukkit.getScheduler().runTaskLater(plugin,
+                    () -> findSafeLocationAsync(player, world, settings, attempts, callback), 20L);
+            return;
+        }
+
+        findCandidate(player, world, settings, attempts, 0, centerX, centerZ,
+                minRadius, maxRadius, minY, maxY, callback);
     }
 
     private void findCandidate(Player player, World world, WorldSettings settings, int attempts, int attempt,
-                               double centerX, double centerZ, double halfSize, int minY, int maxY,
-                               java.util.function.Consumer<Location> callback) {
+                               double centerX, double centerZ, int minRadius, int maxRadius,
+                               int minY, int maxY, java.util.function.Consumer<Location> callback) {
         if (!player.isOnline() || attempt >= attempts) {
             callback.accept(null);
             return;
         }
 
-        /*
-         * RTP não pode depender da geração de uma chunk aleatória no momento do
-         * comando. Em Spigot puro, uma chunk ainda não gerada pode bloquear o
-         * thread principal; a API oficial confirma que getChunkAt/loadChunk com
-         * generate=true gera a chunk. BetterRTP também usa fila/preparação de
-         * destinos para não fazer esse trabalho em rajadas.
-         *
-         * Primeiro usamos somente chunks que já existem. Assim o /rtp conclui
-         * imediatamente sem congelar o servidor. A seleção continua aleatória
-         * entre as chunks já geradas.
-         */
-        List<org.bukkit.Chunk> loaded = new ArrayList<>(Arrays.asList(world.getLoadedChunks()));
-        Collections.shuffle(loaded, ThreadLocalRandom.current());
+        ThreadLocalRandom random = ThreadLocalRandom.current();
 
-        for (org.bukkit.Chunk chunk : loaded) {
-            if (!world.getWorldBorder().isInside(chunk.getBlock(8, 64, 8).getLocation())) continue;
+        // Distribuição uniforme pela área do círculo/anel, respeitando exatamente
+        // raio-mínimo e raio-máximo da configuração do mundo.
+        double minSquared = (double) minRadius * minRadius;
+        double maxSquared = (double) maxRadius * maxRadius;
+        double radius = Math.sqrt(random.nextDouble(minSquared, maxSquared));
+        double angle = random.nextDouble(0.0D, Math.PI * 2.0D);
 
-            Location safe = analyzeChunkForSurface(world, chunk.getX(), chunk.getZ(), minY, maxY);
-            if (safe != null) {
-                callback.accept(safe);
-                return;
-            }
+        double x = centerX + Math.cos(angle) * radius;
+        double z = centerZ + Math.sin(angle) * radius;
+        int chunkX = ((int) Math.floor(x)) >> 4;
+        int chunkZ = ((int) Math.floor(z)) >> 4;
+
+        Location probe = new Location(world, chunkX * 16 + 8.0D, 64.0D, chunkZ * 16 + 8.0D);
+        if (!world.getWorldBorder().isInside(probe) || !world.isChunkGenerated(chunkX, chunkZ)) {
+            Bukkit.getScheduler().runTaskLater(plugin,
+                    () -> findCandidate(player, world, settings, attempts, attempt + 1,
+                            centerX, centerZ, minRadius, maxRadius, minY, maxY, callback), 1L);
+            return;
         }
 
-        // Se a área carregada não tiver um ponto seguro, procura aleatoriamente
-        // somente entre chunks que já foram geradas e estão salvas no mundo.
-        for (int i = 0; i < Math.min(16, attempts); i++) {
-            double x = centerX + randomBetween(-halfSize, halfSize);
-            double z = centerZ + randomBetween(-halfSize, halfSize);
-            int chunkX = ((int) Math.floor(x)) >> 4;
-            int chunkZ = ((int) Math.floor(z)) >> 4;
-
-            Location probe = new Location(world, chunkX * 16 + 8.0D, 64.0D, chunkZ * 16 + 8.0D);
-            if (!world.getWorldBorder().isInside(probe)) continue;
-            if (!world.isChunkGenerated(chunkX, chunkZ)) continue;
-
-            Location safe = analyzeChunkForSurface(world, chunkX, chunkZ, minY, maxY);
-            if (safe != null) {
-                callback.accept(safe);
-                return;
-            }
+        Location safe = analyzeChunkForSurface(world, chunkX, chunkZ, minY, maxY);
+        if (safe != null) {
+            callback.accept(safe);
+            return;
         }
 
-        // Mundo recém-criado: o chunk do spawn é o último fallback seguro.
-        Location spawn = world.getSpawnLocation();
-        int spawnChunkX = spawn.getBlockX() >> 4;
-        int spawnChunkZ = spawn.getBlockZ() >> 4;
-        if (world.isChunkGenerated(spawnChunkX, spawnChunkZ)) {
-            Location safe = analyzeChunkForSurface(world, spawnChunkX, spawnChunkZ, minY, maxY);
-            if (safe != null) {
-                callback.accept(safe);
-                return;
-            }
-        }
-
-        // Nenhuma chunk já gerada possui superfície válida. Não iniciamos geração
-        // síncrona como tentativa final: isso era exatamente o que estava causando
-        // o congelamento observado no servidor.
         Bukkit.getScheduler().runTaskLater(plugin,
                 () -> findCandidate(player, world, settings, attempts, attempt + 1,
-                        centerX, centerZ, halfSize, minY, maxY, callback), 2L);
+                        centerX, centerZ, minRadius, maxRadius, minY, maxY, callback), 1L);
     }
 
     private void retryTeleport(Player player, WorldSettings settings, Location location, World world, int attempt) {
