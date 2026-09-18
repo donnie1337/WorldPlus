@@ -73,12 +73,11 @@ public final class RtpChunkLoader {
 
             return true;
         } catch (Throwable exception) {
-            if (!initialized) {
-                plugin.getLogger().warning(
-                        "Não foi possível inicializar o carregador assíncrono de chunks do RTP: "
-                                + exception.getClass().getSimpleName() + ": " + exception.getMessage()
-                );
-            }
+            plugin.getLogger().warning(
+                    "Falha ao solicitar chunk assíncrona para RTP em " + world.getName()
+                            + " (" + chunkX + "," + chunkZ + "): "
+                            + exception.getClass().getSimpleName() + ": " + exception.getMessage()
+            );
             return false;
         }
     }
