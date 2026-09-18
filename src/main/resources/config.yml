@@ -62,13 +62,13 @@ mundos:
 
 rtp:
   geral:
-    atraso-segundos: 5
+    atraso-segundos: 3
     cancelar-ao-mover: false
     # Tempo mínimo entre usos do /rtp.
     # 15 segundos dão tempo para o servidor concluir o processamento
     # e a geração/carregamento das chunks antes de outro RTP.
     cooldown-segundos: 15
-    # Mantém o jogador aguardando com o title enquanto a região do destino é preparada.
+    # O atraso é a única espera do RTP; a coordenada/chunk é preparada durante esse período.
     pre-carregar-segundos: 3
     max-tentativas: 32
     blocos-bloqueados:
