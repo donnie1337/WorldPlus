@@ -26,13 +26,6 @@ mundos:
     pvp: true
     manter-inventario: true
     dificuldade: "NORMAL"
-    spawn:
-      x: 0
-      y: 0
-      z: 0
-      yaw: 0
-      pitch: 0
-
   mineracao:
     nome: "mining"
     ambiente: "NORMAL"
@@ -43,13 +36,6 @@ mundos:
     pvp: true
     manter-inventario: true
     dificuldade: "NORMAL"
-    spawn:
-      x: 0
-      y: 0
-      z: 0
-      yaw: 0
-      pitch: 0
-
   nether:
     nome: "world_nether"
     ambiente: "NETHER"
@@ -60,13 +46,6 @@ mundos:
     pvp: true
     manter-inventario: true
     dificuldade: "HARD"
-    spawn:
-      x: 0
-      y: 0
-      z: 0
-      yaw: 0
-      pitch: 0
-
   end:
     nome: "world_the_end"
     ambiente: "THE_END"
@@ -77,13 +56,6 @@ mundos:
     pvp: true
     manter-inventario: true
     dificuldade: "HARD"
-    spawn:
-      x: 0
-      y: 0
-      z: 0
-      yaw: 0
-      pitch: 0
-
 mensagens:
   prefixo: "&7&lᴡᴏʀʟᴅᴘʟᴜs &8• &r"
   sem-permissao: "&cVocê não tem permissão para executar este comando."
