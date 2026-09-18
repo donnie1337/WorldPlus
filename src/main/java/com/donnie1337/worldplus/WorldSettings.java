@@ -14,6 +14,7 @@ public record WorldSettings(
         boolean pvp,
         boolean keepInventory,
         Difficulty difficulty,
+        boolean customSpawn,
         int spawnX,
         int spawnY,
         int spawnZ,
