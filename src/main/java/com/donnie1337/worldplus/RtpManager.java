@@ -19,6 +19,7 @@ public final class RtpManager implements Listener {
     private final Map<UUID, Long> cooldowns = new HashMap<>();
     private final Map<UUID, Long> delays = new HashMap<>();
     private final Map<UUID, String> pendingWorlds = new HashMap<>();
+    private final Map<UUID, Location> pendingLocations = new HashMap<>();
     private final Map<String, Long> heatmap = new HashMap<>();
     private final Set<UUID> processing = new HashSet<>();
     private final Queue<RtpRequest> queue = new ArrayDeque<>();
@@ -65,17 +66,32 @@ public final class RtpManager implements Listener {
         // Quando o contador termina, o jogador não espera mais nada: se a chunk
         // estiver pronta e a posição for segura, ele é teleportado imediatamente.
         if (delay > 0 && !player.hasPermission("worldplus.rtp.bypass.delay")) {
-            pendingWorlds.put(player.getUniqueId(), settings.id());
-            delays.put(player.getUniqueId(), System.currentTimeMillis() + delay * 1000L);
+            UUID uuid = player.getUniqueId();
+            pendingWorlds.put(uuid, settings.id());
+            delays.put(uuid, System.currentTimeMillis() + delay * 1000L);
             if (plugin.getTitleManager() != null) {
                 plugin.getTitleManager().showRtpLoading(player, delay * 20);
             }
 
+            // Começa a preparar a coordenada e a única chunk imediatamente.
+            // A geração acontece durante o atraso, não depois dele.
+            enqueue(player, settings.id());
+
             Bukkit.getScheduler().runTaskLater(plugin, () -> {
-                String pending = pendingWorlds.remove(player.getUniqueId());
-                delays.remove(player.getUniqueId());
-                if (pending == null || !player.isOnline()) return;
-                enqueue(player, pending);
+                if (!player.isOnline()) return;
+                pendingWorlds.remove(uuid);
+                delays.remove(uuid);
+
+                Location ready = pendingLocations.remove(uuid);
+                if (ready != null) {
+                    player.teleport(ready);
+                    if (plugin.getTitleManager() != null) {
+                        plugin.getTitleManager().showBiomeAfterRtp(player, ready);
+                    }
+                    cooldowns.put(uuid, System.currentTimeMillis() + cooldownSeconds(settings) * 1000L);
+                    heatmap.merge(settings.name(), 1L, Long::sum);
+                    finish(player);
+                }
             }, delay * 20L);
             return;
         }
@@ -131,16 +147,21 @@ public final class RtpManager implements Listener {
                 return;
             }
 
+            UUID uuid = player.getUniqueId();
+            if (pendingWorlds.containsKey(uuid)) {
+                pendingLocations.put(uuid, safe);
+                return;
+            }
+
             player.teleport(safe);
             if (plugin.getTitleManager() != null) {
                 plugin.getTitleManager().showBiomeAfterRtp(player, safe);
             }
 
-            UUID uuid = player.getUniqueId();
             cooldowns.put(uuid, System.currentTimeMillis() + cooldownSeconds(settings) * 1000L);
             heatmap.merge(rtpWorld.getName(), 1L, Long::sum);
-            // Depois do teleporte, a própria presença do jogador mantém/carrega
-            // a chunk de destino conforme a distância de renderização do servidor.
+            // Depois do teleporte, a própria presença/renderização do jogador
+            // mantém/carrega a chunk de destino.
             finish(player);
         });
     }
@@ -364,6 +385,7 @@ public final class RtpManager implements Listener {
     public void onQuit(PlayerQuitEvent event) {
         UUID uuid = event.getPlayer().getUniqueId();
         pendingWorlds.remove(uuid);
+        pendingLocations.remove(uuid);
         delays.remove(uuid);
         processing.remove(uuid);
 
