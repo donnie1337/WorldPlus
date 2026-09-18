@@ -68,16 +68,22 @@ public final class RtpCommand implements CommandExecutor, TabCompleter, Listener
                 };
 
                 meta.setDisplayName(color(nome));
+                String raio = format(
+                        plugin.getConfig().getDouble(
+                                "rtp.mundos." + settings.id() + ".raio-maximo",
+                                settings.size() / 2
+                        )
+                );
+
                 meta.setLore(List.of(
-                        color("&8• &7Mundo: &f" + settings.name()),
-                        color("&8• &7Raio máximo: &f" + format(
-                                plugin.getConfig().getDouble(
-                                        "rtp.mundos." + settings.id() + ".raio-maximo",
-                                        settings.size() / 2
-                                )
-                        )),
-                        "",
-                        color("&a&lClique para teleportar")
+                        color("&8&m-----------------------"),
+                        color("&7&l• &fTeleportação aleatória"),
+                        color("&8"),
+                        color("&7Mundo: &f" + settings.name()),
+                        color("&7Raio de exploração: &b" + raio + " blocos"),
+                        color("&8"),
+                        color("&a&l➜ &aClique para teleportar"),
+                        color("&8&m-----------------------")
                 ));
                 item.setItemMeta(meta);
             }
