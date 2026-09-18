@@ -8,16 +8,15 @@ import org.bukkit.plugin.Plugin;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 
 /**
- * Ponte específica para o sistema de chunks do servidor Spigot 26.2.
+ * Ponte entre o RTP e o pipeline interno de chunks do Spigot 26.2.
  *
- * O Bukkit API de Spigot não expõe uma operação assíncrona de geração de
- * chunks. O servidor, porém, possui o ServerChunkCache#getChunkFuture,
- * que agenda a geração no pipeline interno de chunks e devolve um future.
- *
- * Tudo que toca o Bukkit/World novamente é devolvido ao thread principal.
+ * O Bukkit API não expõe uma operação portátil de geração assíncrona de chunks.
+ * Em 26.2, o ServerChunkCache possui getChunkFuture(...), que inicia/aguarda
+ * o pipeline de geração sem chamar getChunk(..., true) no thread principal.
  */
 public final class RtpChunkLoader {
     private static volatile boolean initialized;
@@ -44,39 +43,89 @@ public final class RtpChunkLoader {
             );
 
             if (!(futureObject instanceof CompletableFuture<?> future)) {
-                throw new IllegalStateException("ServerChunkCache#getChunkFuture não retornou CompletableFuture.");
+                throw new IllegalStateException(
+                        "getChunkFuture retornou " + (futureObject == null
+                                ? "null"
+                                : futureObject.getClass().getName())
+                );
             }
 
-            future.whenComplete((result, throwable) -> Bukkit.getScheduler().runTask(plugin, () -> {
-                if (throwable != null || result == null) {
-                    callback.accept(false);
-                    return;
-                }
+            CompletableFuture<?> completion = future;
+            completion.orTimeout(30, TimeUnit.SECONDS).whenComplete((result, throwable) ->
+                    Bukkit.getScheduler().runTask(plugin, () -> {
+                        if (throwable != null) {
+                            plugin.getLogger().warning(
+                                    "RTP: geração da chunk " + chunkX + "," + chunkZ
+                                            + " falhou/expirou em " + world.getName()
+                                            + ": " + throwable.getClass().getSimpleName()
+                                            + ": " + String.valueOf(throwable.getMessage())
+                            );
+                            callback.accept(false);
+                            return;
+                        }
 
-                try {
-                    if (!isSuccessMethod.invoke(result).equals(Boolean.TRUE)) {
-                        callback.accept(false);
-                        return;
-                    }
-                } catch (Throwable ignored) {
-                    // Se a implementação não expuser isSuccess(), a existência
-                    // de um resultado FULL já é suficiente para continuar.
-                }
+                        if (result == null) {
+                            plugin.getLogger().warning(
+                                    "RTP: pipeline retornou resultado nulo para "
+                                            + world.getName() + " (" + chunkX + "," + chunkZ + ")."
+                            );
+                            callback.accept(false);
+                            return;
+                        }
 
-                try {
-                    Chunk chunk = world.getChunkAt(chunkX, chunkZ, false);
-                    callback.accept(chunk != null && chunk.isGenerated());
-                } catch (Throwable exception) {
-                    callback.accept(false);
-                }
-            }));
+                        if (isSuccessMethod != null) {
+                            try {
+                                Object success = isSuccessMethod.invoke(result);
+                                if (!Boolean.TRUE.equals(success)) {
+                                    plugin.getLogger().warning(
+                                            "RTP: pipeline não produziu uma chunk FULL para "
+                                                    + world.getName() + " (" + chunkX + "," + chunkZ + ")."
+                                    );
+                                    callback.accept(false);
+                                    return;
+                                }
+                            } catch (Throwable exception) {
+                                plugin.getLogger().warning(
+                                        "RTP: não foi possível validar ChunkResult em "
+                                                + world.getName() + ": "
+                                                + exception.getClass().getSimpleName() + ": "
+                                                + String.valueOf(exception.getMessage())
+                                );
+                                callback.accept(false);
+                                return;
+                            }
+                        }
+
+                        try {
+                            Chunk chunk = world.getChunkAt(chunkX, chunkZ, false);
+                            boolean ready = chunk != null && chunk.isGenerated();
+                            if (!ready) {
+                                plugin.getLogger().warning(
+                                        "RTP: future concluiu, mas a chunk não está disponível no Bukkit: "
+                                                + world.getName() + " (" + chunkX + "," + chunkZ + ")."
+                                );
+                            }
+                            callback.accept(ready);
+                        } catch (Throwable exception) {
+                            plugin.getLogger().warning(
+                                    "RTP: erro ao acessar chunk pronta em " + world.getName()
+                                            + " (" + chunkX + "," + chunkZ + "): "
+                                            + exception.getClass().getSimpleName() + ": "
+                                            + String.valueOf(exception.getMessage())
+                            );
+                            callback.accept(false);
+                        }
+                    })
+            );
 
             return true;
         } catch (Throwable exception) {
+            initialized = false;
             plugin.getLogger().warning(
-                    "Falha ao solicitar chunk assíncrona para RTP em " + world.getName()
-                            + " (" + chunkX + "," + chunkZ + "): "
-                            + exception.getClass().getSimpleName() + ": " + exception.getMessage()
+                    "RTP: não foi possível acessar o pipeline de chunks de Spigot 26.2 em "
+                            + world.getName() + " (" + chunkX + "," + chunkZ + "): "
+                            + exception.getClass().getName() + ": "
+                            + String.valueOf(exception.getMessage())
             );
             return false;
         }
@@ -87,26 +136,83 @@ public final class RtpChunkLoader {
             return;
         }
 
-        worldHandleMethod = world.getClass().getMethod("getHandle");
+        worldHandleMethod = findMethod(world.getClass(), "getHandle");
         Object handle = worldHandleMethod.invoke(world);
-        getChunkSourceMethod = handle.getClass().getMethod("getChunkSource");
+        getChunkSourceMethod = findMethod(handle.getClass(), "getChunkSource");
 
         Object chunkSource = getChunkSourceMethod.invoke(handle);
-        Class<?> chunkStatusClass = Class.forName("net.minecraft.world.level.chunk.status.ChunkStatus");
-
-        getChunkFutureMethod = chunkSource.getClass().getMethod(
-                "getChunkFuture",
-                int.class,
-                int.class,
-                chunkStatusClass,
-                boolean.class
+        Class<?> chunkStatusClass = Class.forName(
+                "net.minecraft.world.level.chunk.status.ChunkStatus"
         );
 
-        fullStatusField = chunkStatusClass.getField("FULL");
+        getChunkFutureMethod = findChunkFutureMethod(chunkSource.getClass(), chunkStatusClass);
+        if (getChunkFutureMethod == null) {
+            throw new NoSuchMethodException(
+                    "ServerChunkCache#getChunkFuture(int,int,ChunkStatus,boolean) não encontrado"
+            );
+        }
 
-        Class<?> chunkResultClass = Class.forName("net.minecraft.server.level.ChunkResult");
-        isSuccessMethod = chunkResultClass.getMethod("isSuccess");
+        fullStatusField = findField(chunkStatusClass, "FULL");
+        if (fullStatusField == null) {
+            throw new NoSuchFieldException("ChunkStatus.FULL não encontrado");
+        }
+
+        try {
+            Class<?> chunkResultClass = Class.forName(
+                    "net.minecraft.server.level.ChunkResult"
+            );
+            isSuccessMethod = findMethod(chunkResultClass, "isSuccess");
+        } catch (ClassNotFoundException exception) {
+            // Algumas builds expõem o resultado do future com outro wrapper.
+            // Nesse caso, o próprio resultado FULL será considerado suficiente.
+            isSuccessMethod = null;
+        }
 
         initialized = true;
+    }
+
+    private static Method findChunkFutureMethod(Class<?> type, Class<?> chunkStatusClass) {
+        for (Class<?> current = type; current != null; current = current.getSuperclass()) {
+            for (Method method : current.getDeclaredMethods()) {
+                if (!method.getName().equals("getChunkFuture")) continue;
+
+                Class<?>[] parameters = method.getParameterTypes();
+                if (parameters.length != 4) continue;
+                if (parameters[0] != int.class || parameters[1] != int.class) continue;
+                if (!parameters[2].isAssignableFrom(chunkStatusClass)
+                        && !chunkStatusClass.isAssignableFrom(parameters[2])) continue;
+                if (parameters[3] != boolean.class) continue;
+
+                method.setAccessible(true);
+                return method;
+            }
+        }
+        return null;
+    }
+
+    private static Method findMethod(Class<?> type, String name) throws NoSuchMethodException {
+        for (Class<?> current = type; current != null; current = current.getSuperclass()) {
+            try {
+                Method method = current.getDeclaredMethod(name);
+                method.setAccessible(true);
+                return method;
+            } catch (NoSuchMethodException ignored) {
+                // continua nas superclasses
+            }
+        }
+        throw new NoSuchMethodException(type.getName() + "#" + name + "()");
+    }
+
+    private static Field findField(Class<?> type, String name) throws NoSuchFieldException {
+        for (Class<?> current = type; current != null; current = current.getSuperclass()) {
+            try {
+                Field field = current.getDeclaredField(name);
+                field.setAccessible(true);
+                return field;
+            } catch (NoSuchFieldException ignored) {
+                // continua nas superclasses
+            }
+        }
+        throw new NoSuchFieldException(type.getName() + "#" + name);
     }
 }
