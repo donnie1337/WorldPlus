@@ -134,12 +134,12 @@ public final class RtpPreGenerator {
                 z = -r + ringSideOffset;
             }
             case 2 -> {
-                x = r - ringSideOffset(r);
+                x = r - ringSideOffset;
                 z = r;
             }
             default -> {
                 x = -r;
-                z = r - ringSideOffset(r);
+                z = r - ringSideOffset;
             }
         }
 
