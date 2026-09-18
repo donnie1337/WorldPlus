@@ -2,8 +2,6 @@ package com.donnie1337.worldplus;
 
 import org.bukkit.Bukkit;
 import org.bukkit.World;
-import org.bukkit.plugin.java.JavaPlugin;
-
 import java.util.ArrayList;
 import java.util.List;
 
@@ -60,13 +58,12 @@ public final class RtpPreGenerator {
             return;
         }
 
-        int maxRadius = getMaxRadius(settings);
-        int minRadius = getMinRadius(settings);
-        chunkX = -((int) Math.ceil(maxRadius / 16.0D));
-        chunkZ = -((int) Math.ceil(maxRadius / 16.0D));
+        int halfSize = Math.max(1, (int) Math.ceil(settings.size() / 2.0D));
+        chunkX = (int) Math.floor((-halfSize) / 16.0D);
+        chunkZ = (int) Math.floor((-halfSize) / 16.0D);
 
-        plugin.getLogger().info("WorldPlus: iniciando pré-geração RTP de " + settings.id()
-                + " (" + minRadius + " -> " + maxRadius + " blocos).");
+        plugin.getLogger().info("WorldPlus: iniciando pré-geração completa de " + settings.id()
+                + " (" + settings.size() + "x" + settings.size() + " blocos).");
     }
 
     private void tick() {
@@ -139,28 +136,4 @@ public final class RtpPreGenerator {
         prepareWorld();
     }
 
-    private int getMinRadius(WorldSettings settings) {
-        return Math.max(0, plugin.getConfig().getInt(
-                "rtp.mundos." + settings.id() + ".raio-minimo", 0));
-    }
-
-    private int getMaxRadius(WorldSettings settings) {
-        return Math.max(getMinRadius(settings), plugin.getConfig().getInt(
-                "rtp.mundos." + settings.id() + ".raio-maximo",
-                (int) (settings.size() / 2.0D)));
-    }
-
-    private double getCenterX(WorldSettings settings) {
-        return plugin.getConfig().getDouble(
-                "rtp.mundos." + settings.id() + ".centro-x", 0.0D);
-    }
-
-    private double getCenterZ(WorldSettings settings) {
-        return plugin.getConfig().getDouble(
-                "rtp.mundos." + settings.id() + ".centro-z", 0.0D);
-    }
-
-    private double square(double value) {
-        return value * value;
-    }
 }
