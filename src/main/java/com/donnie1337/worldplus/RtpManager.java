@@ -274,9 +274,8 @@ public final class RtpManager implements Listener {
         // interno. Forçar a geração pela API Bukkit pode fazer a etapa de estruturas
         // disparar AsyncStructureSpawnEvent em um contexto inválido e derrubar o worker.
         //
-        // O WorldPlus solicita o status FULL diretamente ao pipeline NMS por reflexão,
-        // sem bloquear a thread principal. O callback volta para a thread principal
-        // somente depois que a CompletableFuture terminar.
+        // A geração é solicitada por ticket do plugin e acompanhada por polling leve.
+        // Não bloqueamos a thread principal nem usamos chamadas NMS refletivas.
         if (!world.isChunkGenerated(chunkX, chunkZ)) {
             final int nextAttempt = attempt + 1;
             requestChunkGenerationAsync(player, world, chunkX, chunkZ, generated -> {
@@ -288,7 +287,6 @@ public final class RtpManager implements Listener {
                 if (!generated) {
                     Bukkit.getScheduler().runTaskLater(plugin, () -> findCandidate(player, world, settings, attempts, nextAttempt,
                             minRadius, maxRadius, useBorder, centerX, centerZ, shape, minY, maxY, callback), 1L);
-                    return;
                     return;
                 }
 
