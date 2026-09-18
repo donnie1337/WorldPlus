@@ -143,6 +143,66 @@ public final class WorldPlus extends JavaPlugin {
         world.setSpawnLocation(location.getBlockX(), location.getBlockY(), location.getBlockZ(), location.getYaw());
     }
 
+    public boolean deleteWorld(WorldSettings settings) {
+        World world = Bukkit.getWorld(settings.name());
+
+        World destination = Bukkit.getWorld("world");
+        if (destination == null) {
+            for (World candidate : Bukkit.getWorlds()) {
+                if (!candidate.getName().equalsIgnoreCase(settings.name())) {
+                    destination = candidate;
+                    break;
+                }
+            }
+        }
+
+        if (world != null) {
+            if (destination == null) {
+                getLogger().warning("Não foi possível excluir '" + settings.id() + "' porque não existe outro mundo para receber os jogadores.");
+                return false;
+            }
+
+            for (org.bukkit.entity.Player player : world.getPlayers()) {
+                player.teleport(destination.getSpawnLocation());
+            }
+
+            if (!Bukkit.unloadWorld(world, true)) {
+                getLogger().warning("Não foi possível descarregar o mundo '" + settings.name() + "'.");
+                return false;
+            }
+        }
+
+        Path worldFolder = new File(Bukkit.getWorldContainer(), settings.name()).toPath();
+        try {
+            if (Files.exists(worldFolder)) {
+                try (var stream = Files.walk(worldFolder)) {
+                    stream.sorted((a, b) -> b.compareTo(a)).forEach(path -> {
+                        try {
+                            Files.deleteIfExists(path);
+                        } catch (IOException exception) {
+                            throw new WorldDeletionException(exception);
+                        }
+                    });
+                }
+            }
+
+            getConfig().set("mundos." + settings.id(), null);
+            saveConfig();
+            worlds.remove(settings.id());
+            return true;
+        } catch (WorldDeletionException exception) {
+            getLogger().warning("Falha ao excluir o mundo '" + settings.name() + "': " + exception.getCause().getMessage());
+            return false;
+        } catch (IOException exception) {
+            getLogger().warning("Falha ao acessar os arquivos do mundo '" + settings.name() + "': " + exception.getMessage());
+            return false;
+        }
+    }
+
+    private static final class WorldDeletionException extends RuntimeException {
+        private WorldDeletionException(IOException cause) { super(cause); }
+    }
+
     private void installStrongholdDatapack(WorldSettings settings) throws IOException {
         File worldFolder = new File(Bukkit.getWorldContainer(), settings.name());
         if (!settings.removeStrongholds()) {
