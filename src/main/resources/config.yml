@@ -7,14 +7,13 @@ configuracao:
   criar-mundos-automaticamente: true
   aplicar-datapack-sem-stronghold: true
   mensagem-console: true
+  aplicar-configuracoes-ao-carregar: true
 
 # Tamanho da borda em blocos.
 # 10000 = 10.000 x 10.000 blocos.
 #
-# IMPORTANTE:
-# Para que Overworld e Mineração realmente não tenham Strongholds,
-# o datapack do WorldPlus precisa estar presente ANTES da criação
-# do mundo. Para mundos já existentes, será necessário recriá-los.
+# Os valores abaixo também podem ser usados para configurar cada
+# mundo individualmente.
 mundos:
 
   overworld:
@@ -24,6 +23,15 @@ mundos:
     tamanho: 10000
     estruturas: true
     remover-strongholds: true
+    pvp: true
+    manter-inventario: true
+    dificuldade: "NORMAL"
+    spawn:
+      x: 0
+      y: 0
+      z: 0
+      yaw: 0
+      pitch: 0
 
   mineracao:
     nome: "mining"
@@ -32,31 +40,63 @@ mundos:
     tamanho: 10000
     estruturas: true
     remover-strongholds: true
+    pvp: true
+    manter-inventario: true
+    dificuldade: "NORMAL"
+    spawn:
+      x: 0
+      y: 0
+      z: 0
+      yaw: 0
+      pitch: 0
 
   nether:
     nome: "world_nether"
     ambiente: "NETHER"
     seed: -2615049381726503847
-    tamanho: 10000
+    tamanho: 7000
     estruturas: true
     remover-strongholds: false
+    pvp: true
+    manter-inventario: true
+    dificuldade: "HARD"
+    spawn:
+      x: 0
+      y: 0
+      z: 0
+      yaw: 0
+      pitch: 0
 
   end:
     nome: "world_the_end"
     ambiente: "THE_END"
     seed: 731946205817394602
-    tamanho: 10000
+    tamanho: 7000
     estruturas: true
     remover-strongholds: false
+    pvp: true
+    manter-inventario: true
+    dificuldade: "HARD"
+    spawn:
+      x: 0
+      y: 0
+      z: 0
+      yaw: 0
+      pitch: 0
 
 mensagens:
   prefixo: "&7&lᴡᴏʀʟᴅᴘʟᴜs &8• &r"
   sem-permissao: "&cVocê não tem permissão para executar este comando."
-  uso: "&cUso: /mundos <lista|criar|tp|recarregar>"
+  uso: "&cUso: /mundos <lista|info|tp|spawn|setspawn|criar|recarregar>"
   mundo-nao-encontrado: "&cMundo configurado não encontrado: &f{id}&c."
   mundo-criado: "&aMundo &f{id} &acriado/carregado com sucesso."
   mundo-ja-carregado: "&eMundo &f{id} &ejá está carregado."
   recarregado: "&aConfiguração recarregada."
   jogador-apenas: "&cEste comando precisa ser executado por um jogador."
   teleporte: "&aTeleportado para &f{id}&a."
+  spawn-definido: "&aSpawn do mundo &f{id} &adefinido na sua posição."
+  info-cabecalho: "&7&lᴡᴏʀʟᴅᴘʟᴜs &8• &f{id}"
+  info-linha: "&8• &7Nome: &f{name} &8| &7Ambiente: &f{environment} &8| &7Borda: &f{size}"
+  info-status: "&8• &7Status: {status}"
+  info-regras: "&8• &7PVP: {pvp} &8| &7Inventário: {inventory} &8| &7Dificuldade: &f{difficulty}"
   erro: "&cNão foi possível criar/carregar o mundo &f{id}&c."
