@@ -334,7 +334,7 @@ public final class RtpManager implements Listener {
             Method getChunkSource = serverLevel.getClass().getMethod("getChunkSource");
             Object chunkSource = getChunkSource.invoke(serverLevel);
 
-            Class<?> chunkStatusClass = Class.forName("net.minecraft.world.level.chunk.ChunkStatus");
+            Class<?> chunkStatusClass = Class.forName("net.minecraft.world.level.chunk.status.ChunkStatus");
             Object fullStatus = chunkStatusClass.getField("FULL").get(null);
 
             Method getChunkFuture = chunkSource.getClass().getMethod(
