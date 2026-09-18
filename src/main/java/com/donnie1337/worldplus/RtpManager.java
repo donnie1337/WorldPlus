@@ -20,6 +20,8 @@ public final class RtpManager implements Listener {
     private final Map<UUID, Long> delays = new HashMap<>();
     private final Map<UUID, String> pendingWorlds = new HashMap<>();
     private final Map<UUID, Location> pendingLocations = new HashMap<>();
+    private final Map<UUID, Boolean> delayExpired = new HashMap<>();
+    private final Set<UUID> pendingTeleport = new HashSet<>();
     private final Map<String, Long> heatmap = new HashMap<>();
     private final Set<UUID> processing = new HashSet<>();
     private final Queue<RtpRequest> queue = new ArrayDeque<>();
@@ -68,30 +70,28 @@ public final class RtpManager implements Listener {
         if (delay > 0 && !player.hasPermission("worldplus.rtp.bypass.delay")) {
             UUID uuid = player.getUniqueId();
             pendingWorlds.put(uuid, settings.id());
+            pendingLocations.remove(uuid);
+            delayExpired.put(uuid, false);
             delays.put(uuid, System.currentTimeMillis() + delay * 1000L);
+
             if (plugin.getTitleManager() != null) {
                 plugin.getTitleManager().showRtpLoading(player, delay * 20);
             }
 
-            // Começa a preparar a coordenada e a única chunk imediatamente.
-            // A geração acontece durante o atraso, não depois dele.
+            // A preparação começa imediatamente. O contador e a preparação
+            // acontecem em paralelo.
             enqueue(player, settings.id());
 
             Bukkit.getScheduler().runTaskLater(plugin, () -> {
                 if (!player.isOnline()) return;
-                pendingWorlds.remove(uuid);
-                delays.remove(uuid);
 
-                Location ready = pendingLocations.remove(uuid);
-                if (ready != null) {
-                    player.teleport(ready);
-                    if (plugin.getTitleManager() != null) {
-                        plugin.getTitleManager().showBiomeAfterRtp(player, ready);
-                    }
-                    cooldowns.put(uuid, System.currentTimeMillis() + cooldownSeconds(settings) * 1000L);
-                    heatmap.merge(settings.name(), 1L, Long::sum);
-                    finish(player);
-                }
+                delays.remove(uuid);
+                delayExpired.put(uuid, true);
+
+                // Se a chunk/local já estiver pronto, teleporta agora.
+                // Se ainda estiver sendo preparado, o callback da preparação
+                // fará o teleporte assim que ficar pronto.
+                attemptPendingTeleport(player, settings);
             }, delay * 20L);
             return;
         }
@@ -142,6 +142,12 @@ public final class RtpManager implements Listener {
         int attempts = Math.max(1, plugin.getConfig().getInt("rtp.geral.max-tentativas", 32));
         findSafeLocationAsync(player, rtpWorld, settings, attempts, safe -> {
             if (safe == null) {
+                UUID uuid = player.getUniqueId();
+                pendingWorlds.remove(uuid);
+                pendingLocations.remove(uuid);
+                delayExpired.remove(uuid);
+                delays.remove(uuid);
+                pendingTeleport.remove(uuid);
                 message(player, "local-nao-encontrado", "&cNão foi possível encontrar um local seguro para o RTP.", null, null);
                 finish(player);
                 return;
@@ -150,20 +156,125 @@ public final class RtpManager implements Listener {
             UUID uuid = player.getUniqueId();
             if (pendingWorlds.containsKey(uuid)) {
                 pendingLocations.put(uuid, safe);
+
+                // Se os 3 segundos já terminaram enquanto a chunk era preparada,
+                // não existe uma segunda espera: teleporta imediatamente.
+                if (Boolean.TRUE.equals(delayExpired.get(uuid))) {
+                    attemptPendingTeleport(player, settings);
+                }
                 return;
             }
 
-            player.teleport(safe);
-            if (plugin.getTitleManager() != null) {
-                plugin.getTitleManager().showBiomeAfterRtp(player, safe);
+            teleportReady(player, settings, safe, rtpWorld);
+        });
+    }
+
+    private void attemptPendingTeleport(Player player, WorldSettings settings) {
+        UUID uuid = player.getUniqueId();
+
+        if (!Boolean.TRUE.equals(delayExpired.get(uuid))) return;
+        if (!pendingWorlds.containsKey(uuid)) return;
+        if (pendingTeleport.contains(uuid)) return;
+
+        Location ready = pendingLocations.get(uuid);
+        if (ready == null) return;
+
+        World world = ready.getWorld();
+        if (world == null || !player.isOnline()) {
+            pendingLocations.remove(uuid);
+            pendingWorlds.remove(uuid);
+            delayExpired.remove(uuid);
+            finish(player);
+            return;
+        }
+
+        pendingTeleport.add(uuid);
+        teleportReady(player, settings, ready, world);
+    }
+
+    private void teleportReady(Player player, WorldSettings settings, Location location, World world) {
+        UUID uuid = player.getUniqueId();
+
+        Bukkit.getScheduler().runTask(plugin, () -> {
+            if (!player.isOnline()) {
+                pendingTeleport.remove(uuid);
+                pendingWorlds.remove(uuid);
+                pendingLocations.remove(uuid);
+                delayExpired.remove(uuid);
+                finish(player);
+                return;
             }
 
-            cooldowns.put(uuid, System.currentTimeMillis() + cooldownSeconds(settings) * 1000L);
-            heatmap.merge(rtpWorld.getName(), 1L, Long::sum);
-            // Depois do teleporte, a própria presença/renderização do jogador
-            // mantém/carrega a chunk de destino.
-            finish(player);
+            // Garante que a chunk usada para a posição continua carregada antes
+            // de entregar o jogador ao destino.
+            int chunkX = location.getBlockX() >> 4;
+            int chunkZ = location.getBlockZ() >> 4;
+            try {
+                if (!world.isChunkLoaded(chunkX, chunkZ)) {
+                    world.loadChunk(chunkX, chunkZ, true);
+                }
+
+                boolean success = player.teleport(location, org.bukkit.event.player.PlayerTeleportEvent.TeleportCause.PLUGIN);
+                if (!success) {
+                    // Uma tentativa adicional no tick seguinte cobre cancelamentos
+                    // transitórios do ciclo de teleporte sem criar outro atraso de RTP.
+                    Bukkit.getScheduler().runTask(plugin, () -> {
+                        if (!player.isOnline()) {
+                            pendingTeleport.remove(uuid);
+                            pendingWorlds.remove(uuid);
+                            pendingLocations.remove(uuid);
+                            delayExpired.remove(uuid);
+                            finish(player);
+                            return;
+                        }
+
+                        boolean retrySuccess = player.teleport(location, org.bukkit.event.player.PlayerTeleportEvent.TeleportCause.PLUGIN);
+                        if (retrySuccess) {
+                            completeTeleport(player, settings, location, world);
+                        } else {
+                            message(player, "local-nao-encontrado", "&cNão foi possível concluir o teleporte para o local preparado.", null, null);
+                            pendingTeleport.remove(uuid);
+                            pendingWorlds.remove(uuid);
+                            pendingLocations.remove(uuid);
+                            delayExpired.remove(uuid);
+                            finish(player);
+                        }
+                    });
+                    return;
+                }
+
+                completeTeleport(player, settings, location, world);
+            } catch (Throwable throwable) {
+                plugin.getLogger().warning("Falha ao teleportar jogador para o RTP: " + throwable.getMessage());
+                message(player, "local-nao-encontrado", "&cNão foi possível concluir o teleporte para o local preparado.", null, null);
+                pendingTeleport.remove(uuid);
+                pendingWorlds.remove(uuid);
+                pendingLocations.remove(uuid);
+                delayExpired.remove(uuid);
+                finish(player);
+            }
         });
+    }
+
+    private void completeTeleport(Player player, WorldSettings settings, Location location, World world) {
+        UUID uuid = player.getUniqueId();
+
+        pendingTeleport.remove(uuid);
+        pendingWorlds.remove(uuid);
+        pendingLocations.remove(uuid);
+        delayExpired.remove(uuid);
+        delays.remove(uuid);
+
+        if (plugin.getTitleManager() != null) {
+            plugin.getTitleManager().showBiomeAfterRtp(player, location);
+        }
+
+        cooldowns.put(uuid, System.currentTimeMillis() + cooldownSeconds(settings) * 1000L);
+        heatmap.merge(world.getName(), 1L, Long::sum);
+
+        // Depois do teleporte, a própria presença/renderização do jogador
+        // mantém/carrega a chunk de destino.
+        finish(player);
     }
 
     private void finish(Player player) {
@@ -259,7 +370,9 @@ public final class RtpManager implements Listener {
             int localZ = index >> 4;
 
             int highest = snapshot.getHighestBlockYAt(localX, localZ);
+            int worldMaxY = world.getMaxHeight();
             if (highest < minY || highest >= maxY) continue;
+            if (highest < world.getMinHeight() || highest + 2 >= worldMaxY) continue;
 
             Material floor = snapshot.getBlockType(localX, highest, localZ);
             Material feet = snapshot.getBlockType(localX, highest + 1, localZ);
@@ -387,6 +500,8 @@ public final class RtpManager implements Listener {
         pendingWorlds.remove(uuid);
         pendingLocations.remove(uuid);
         delays.remove(uuid);
+        delayExpired.remove(uuid);
+        pendingTeleport.remove(uuid);
         processing.remove(uuid);
 
     }
