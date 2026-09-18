@@ -119,6 +119,12 @@ public final class RtpPreGenerator {
 
         int[] coordinate = nextChunk(maxChunk, minChunk);
         if (coordinate == null) {
+            int completedRadius = Math.min(
+                    (int) Math.ceil(settings.size() / 2.0D),
+                    Math.max(0, ring * 16)
+            );
+            completedRadii.put(settings.id(), completedRadius);
+
             plugin.getLogger().info("WorldPlus: pré-geração concluída para " + settings.id()
                     + " — " + totalProcessed + " chunks processadas, "
                     + totalSkipped + " já existentes.");
