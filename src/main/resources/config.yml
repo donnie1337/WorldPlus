@@ -98,7 +98,7 @@ rtp:
       usar-borda: true
       centro-x: 0
       centro-z: 0
-      raio-minimo: 250
+      raio-minimo: 100
       raio-maximo: 4800
       formato: "circle"
       y-minimo: 0
@@ -110,7 +110,7 @@ rtp:
       usar-borda: true
       centro-x: 0
       centro-z: 0
-      raio-minimo: 150
+      raio-minimo: 100
       raio-maximo: 3300
       formato: "circle"
       y-minimo: 0
@@ -134,7 +134,7 @@ rtp:
       usar-borda: true
       centro-x: 0
       centro-z: 0
-      raio-minimo: 250
+      raio-minimo: 100
       raio-maximo: 3300
       formato: "circle"
       y-minimo: 0
