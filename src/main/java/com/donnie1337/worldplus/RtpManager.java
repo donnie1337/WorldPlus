@@ -377,7 +377,16 @@ public final class RtpManager implements Listener {
         int chunkZ = ((int) Math.floor(z)) >> 4;
 
         Location probe = new Location(world, chunkX * 16 + 8.0D, 64.0D, chunkZ * 16 + 8.0D);
-        if (!world.getWorldBorder().isInside(probe) || !world.isChunkGenerated(chunkX, chunkZ)) {
+        if (!world.getWorldBorder().isInside(probe)) {
+            retryCandidate(player, world, settings, attempts, attempt,
+                    centerX, centerZ, 0.0D, minY, maxY, callback);
+            return;
+        }
+
+        if (!world.isChunkGenerated(chunkX, chunkZ)) {
+            // A pré-geração trabalha do centro para fora. Enquanto ela avança,
+            // o RTP usa qualquer chunk já gerada dentro do raio configurado.
+            // Não geramos terreno durante o comando.
             Bukkit.getScheduler().runTaskLater(plugin,
                     () -> findCandidate(player, world, settings, attempts, attempt + 1,
                             centerX, centerZ, minRadius, maxRadius, minY, maxY, callback), 1L);
