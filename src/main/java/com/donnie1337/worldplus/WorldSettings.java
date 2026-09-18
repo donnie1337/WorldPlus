@@ -1,5 +1,6 @@
 package com.donnie1337.worldplus;
 
+import org.bukkit.Difficulty;
 import org.bukkit.World;
 
 public record WorldSettings(
@@ -9,6 +10,14 @@ public record WorldSettings(
         long seed,
         double size,
         boolean structures,
-        boolean removeStrongholds
+        boolean removeStrongholds,
+        boolean pvp,
+        boolean keepInventory,
+        Difficulty difficulty,
+        int spawnX,
+        int spawnY,
+        int spawnZ,
+        float spawnYaw,
+        float spawnPitch
 ) {
 }
