@@ -184,7 +184,7 @@ public final class RtpManager implements Listener {
             return;
         }
 
-        world.getChunkAtAsync(chunkX, chunkZ, true, chunk -> {
+        world.getChunkAtAsync(chunkX, chunkZ, true).thenAccept(chunk -> {
             if (!player.isOnline()) {
                 callback.accept(null);
                 return;
