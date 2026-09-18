@@ -248,7 +248,6 @@ public final class RtpManager implements Listener {
                 Bukkit.getScheduler().runTaskLater(plugin, () -> findCandidate(player, world, settings, attempts, attempt + 1,
                         minRadius, maxRadius, useBorder, centerX, centerZ, shape, minY, maxY, callback), 1L);
                 return;
-                return;
             }
         } else {
             double angle = ThreadLocalRandom.current().nextDouble(0, Math.PI * 2);
@@ -262,8 +261,8 @@ public final class RtpManager implements Listener {
         int blockX = (int) Math.floor(x);
         int blockZ = (int) Math.floor(z);
         if (useBorder && !world.getWorldBorder().isInside(new Location(world, blockX, 64, blockZ))) {
-            findCandidate(player, world, settings, attempts, attempt + 1, minRadius, maxRadius,
-                    useBorder, centerX, centerZ, shape, minY, maxY, callback);
+            Bukkit.getScheduler().runTaskLater(plugin, () -> findCandidate(player, world, settings, attempts, attempt + 1,
+                    minRadius, maxRadius, useBorder, centerX, centerZ, shape, minY, maxY, callback), 1L);
             return;
         }
 
@@ -304,8 +303,8 @@ public final class RtpManager implements Listener {
                             + " no mundo " + world.getName() + ": " + throwable.getMessage());
                 }
 
-                findCandidate(player, world, settings, attempts, nextAttempt, minRadius, maxRadius,
-                        useBorder, centerX, centerZ, shape, minY, maxY, callback);
+                Bukkit.getScheduler().runTaskLater(plugin, () -> findCandidate(player, world, settings, attempts, nextAttempt,
+                        minRadius, maxRadius, useBorder, centerX, centerZ, shape, minY, maxY, callback), 1L);
             });
             return;
         }
@@ -317,13 +316,13 @@ public final class RtpManager implements Listener {
                 return;
             }
 
-            findCandidate(player, world, settings, attempts, attempt + 1, minRadius, maxRadius,
-                    useBorder, centerX, centerZ, shape, minY, maxY, callback);
+            Bukkit.getScheduler().runTaskLater(plugin, () -> findCandidate(player, world, settings, attempts, attempt + 1,
+                    minRadius, maxRadius, useBorder, centerX, centerZ, shape, minY, maxY, callback), 1L);
         } catch (Throwable throwable) {
             plugin.getLogger().warning("Falha ao analisar chunk do RTP em " + chunkX + "," + chunkZ
                     + " no mundo " + world.getName() + ": " + throwable.getMessage());
-            findCandidate(player, world, settings, attempts, attempt + 1, minRadius, maxRadius,
-                    useBorder, centerX, centerZ, shape, minY, maxY, callback);
+            Bukkit.getScheduler().runTaskLater(plugin, () -> findCandidate(player, world, settings, attempts, attempt + 1,
+                    minRadius, maxRadius, useBorder, centerX, centerZ, shape, minY, maxY, callback), 1L);
         }
     }
 
