@@ -117,6 +117,34 @@ public final class WorldCommand implements CommandExecutor, TabCompleter {
                         "&cNão foi possível criar/carregar o mundo &f{id}&c.").replace("{id}", s.id())));
                 return true;
             }
+            case "excluir", "delete", "remover" -> {
+                if (!sender.hasPermission("worldplus.admin")) return noPermission(sender);
+                if (args.length < 2) return usage(sender);
+
+                WorldSettings s = plugin.getSettings(args[1]);
+                if (s == null) return notFound(sender, args[1]);
+
+                if (s.id().equalsIgnoreCase("overworld") || s.name().equalsIgnoreCase("world")) {
+                    sender.sendMessage(color(msg("mundo-protegido", "&cO mundo principal não pode ser excluído pelo WorldPlus.")));
+                    return true;
+                }
+
+                if (args.length < 3 || !args[2].equalsIgnoreCase("confirmar")) {
+                    sender.sendMessage(color(msg("confirmar-exclusao",
+                            "&cAtenção: isso excluirá permanentemente o mundo &f{id}&c. Use &f/mundos excluir {id} confirmar &cpara confirmar.")
+                            .replace("{id}", s.id())));
+                    return true;
+                }
+
+                boolean deleted = plugin.deleteWorld(s);
+                if (deleted) {
+                    sender.sendMessage(color(msg("mundo-excluido", "&aMundo &f{id} &aexcluído permanentemente.").replace("{id}", s.id())));
+                } else {
+                    sender.sendMessage(color(msg("erro-exclusao", "&cNão foi possível excluir o mundo &f{id}&c. Verifique se o servidor conseguiu descarregar os arquivos.")
+                            .replace("{id}", s.id())));
+                }
+                return true;
+            }
             case "recarregar", "reload" -> {
                 if (!sender.hasPermission("worldplus.admin")) return noPermission(sender);
                 plugin.reloadConfig();
@@ -161,7 +189,7 @@ public final class WorldCommand implements CommandExecutor, TabCompleter {
     }
 
     private boolean usage(CommandSender sender) {
-        sender.sendMessage(color(msg("uso", "&cUso: /mundos <lista|info|tp|spawn|setspawn|criar|recarregar>")));
+        sender.sendMessage(color(msg("uso", "&cUso: /mundos <lista|info|tp|spawn|setspawn|criar|excluir|recarregar>")));
         return true;
     }
 
@@ -176,8 +204,8 @@ public final class WorldCommand implements CommandExecutor, TabCompleter {
     @Override
     public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] args) {
         if (!sender.hasPermission("worldplus.use")) return Collections.emptyList();
-        if (args.length == 1) return partial(List.of("lista", "info", "tp", "spawn", "setspawn", "criar", "recarregar"), args[0]);
-        if (args.length == 2 && List.of("info", "tp", "spawn", "setspawn", "criar").contains(args[0].toLowerCase()))
+        if (args.length == 1) return partial(List.of("lista", "info", "tp", "spawn", "setspawn", "criar", "excluir", "recarregar"), args[0]);
+        if (args.length == 2 && List.of("info", "tp", "spawn", "setspawn", "criar", "excluir").contains(args[0].toLowerCase()))
             return partial(new ArrayList<>(plugin.getWorlds().keySet()), args[1]);
         if (args.length == 3 && args[0].equalsIgnoreCase("tp") && sender.hasPermission("worldplus.admin"))
             return partial(Bukkit.getOnlinePlayers().stream().map(Player::getName).toList(), args[2]);
