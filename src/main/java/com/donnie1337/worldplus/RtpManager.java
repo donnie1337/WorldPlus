@@ -13,6 +13,8 @@ import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.scheduler.BukkitTask;
 
 import java.util.*;
+import java.lang.reflect.Method;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ThreadLocalRandom;
 
 public final class RtpManager implements Listener {
@@ -267,34 +269,36 @@ public final class RtpManager implements Listener {
         int chunkX = blockX >> 4;
         int chunkZ = blockZ >> 4;
 
-        // Em Spigot puro não existe uma API pública de geração assíncrona de chunks.
-        // Portanto, quando o ponto sorteado ainda não existe, geramos somente UMA
-        // chunk por tick e voltamos para a busca no próximo tick. Isso evita o loop
-        // instantâneo que fazia o RTP consumir todas as tentativas em uma área ainda
-        // não explorada. A geração continua no thread principal, como exige a API,
-        // mas fica limitada a uma chunk por etapa do RTP.
+        // Nunca usamos getChunkAt(..., true) para gerar uma chunk nova aqui.
+        // Em Spigot 26.2 a geração moderna de chunks usa o pipeline assíncrono
+        // interno. Forçar a geração pela API Bukkit pode fazer a etapa de estruturas
+        // disparar AsyncStructureSpawnEvent em um contexto inválido e derrubar o worker.
+        //
+        // O WorldPlus solicita o status FULL diretamente ao pipeline NMS por reflexão,
+        // sem bloquear a thread principal. O callback volta para a thread principal
+        // somente depois que a CompletableFuture terminar.
         if (!world.isChunkGenerated(chunkX, chunkZ)) {
             final int nextAttempt = attempt + 1;
-            Bukkit.getScheduler().runTask(plugin, () -> {
+            requestChunkGenerationAsync(world, chunkX, chunkZ, generated -> {
                 if (!player.isOnline()) {
                     callback.accept(null);
                     return;
                 }
 
-                try {
-                    // Gera somente a chunk sorteada. Depois dela estar pronta,
-                    // procuramos uma superfície válida dentro dela inteira.
-                    // Assim não precisamos gerar dezenas de chunks para achar
-                    // uma coluna segura.
-                    world.getChunkAt(chunkX, chunkZ, true);
+                if (!generated) {
+                    findCandidate(player, world, settings, attempts, nextAttempt, minRadius, maxRadius,
+                            useBorder, centerX, centerZ, shape, minY, maxY, callback);
+                    return;
+                }
 
+                try {
                     Location safe = analyzeChunkForSurface(world, chunkX, chunkZ, minY, maxY);
                     if (safe != null) {
                         callback.accept(safe);
                         return;
                     }
                 } catch (Throwable throwable) {
-                    plugin.getLogger().warning("Falha ao gerar/analisar chunk do RTP em " + chunkX + "," + chunkZ
+                    plugin.getLogger().warning("Falha ao analisar chunk do RTP em " + chunkX + "," + chunkZ
                             + " no mundo " + world.getName() + ": " + throwable.getMessage());
                 }
 
@@ -318,6 +322,50 @@ public final class RtpManager implements Listener {
                     + " no mundo " + world.getName() + ": " + throwable.getMessage());
             findCandidate(player, world, settings, attempts, attempt + 1, minRadius, maxRadius,
                     useBorder, centerX, centerZ, shape, minY, maxY, callback);
+        }
+    }
+
+    private void requestChunkGenerationAsync(World world, int chunkX, int chunkZ,
+                                               java.util.function.Consumer<Boolean> callback) {
+        try {
+            Method getHandle = world.getClass().getMethod("getHandle");
+            Object serverLevel = getHandle.invoke(world);
+
+            Method getChunkSource = serverLevel.getClass().getMethod("getChunkSource");
+            Object chunkSource = getChunkSource.invoke(serverLevel);
+
+            Class<?> chunkStatusClass = Class.forName("net.minecraft.world.level.chunk.ChunkStatus");
+            Object fullStatus = chunkStatusClass.getField("FULL").get(null);
+
+            Method getChunkFuture = chunkSource.getClass().getMethod(
+                    "getChunkFuture",
+                    int.class,
+                    int.class,
+                    chunkStatusClass,
+                    boolean.class
+            );
+
+            Object result = getChunkFuture.invoke(chunkSource, chunkX, chunkZ, fullStatus, true);
+            if (!(result instanceof CompletableFuture<?> future)) {
+                throw new IllegalStateException("O pipeline de chunks não retornou CompletableFuture.");
+            }
+
+            future.whenComplete((ignored, throwable) -> Bukkit.getScheduler().runTask(plugin, () -> {
+                if (throwable != null) {
+                    plugin.getLogger().warning("Falha na geração assíncrona da chunk do RTP em "
+                            + chunkX + "," + chunkZ + " no mundo " + world.getName()
+                            + ": " + throwable.getMessage());
+                    callback.accept(false);
+                    return;
+                }
+
+                callback.accept(world.isChunkGenerated(chunkX, chunkZ));
+            }));
+        } catch (Throwable throwable) {
+            plugin.getLogger().warning("Não foi possível solicitar a geração assíncrona da chunk do RTP em "
+                    + chunkX + "," + chunkZ + " no mundo " + world.getName()
+                    + ": " + throwable.getMessage());
+            Bukkit.getScheduler().runTask(plugin, () -> callback.accept(false));
         }
     }
 
