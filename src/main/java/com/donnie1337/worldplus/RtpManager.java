@@ -196,10 +196,19 @@ public final class RtpManager implements Listener {
         int chunkX = blockX >> 4;
         int chunkZ = blockZ >> 4;
 
-        // Spigot 26.2 não expõe getChunkAtAsync na API Bukkit.
-        // A geração/carregamento é solicitado pela API síncrona do mundo.
+        // Nunca gere um chunk novo durante o RTP.
+        // getChunkAt(..., true) força geração síncrona e pode bloquear o thread principal
+        // por tempo suficiente para desconectar jogadores e travar o servidor.
+        // O RTP só analisa chunks que já foram gerados/carregados pelo servidor.
+        if (!world.isChunkGenerated(chunkX, chunkZ)) {
+            Bukkit.getScheduler().runTask(plugin, () ->
+                    findCandidate(player, world, settings, attempts, attempt + 1, minRadius, maxRadius,
+                            useBorder, centerX, centerZ, shape, minY, maxY, callback));
+            return;
+        }
+
         try {
-            org.bukkit.Chunk chunk = world.getChunkAt(chunkX, chunkZ, true);
+            org.bukkit.Chunk chunk = world.getChunkAt(chunkX, chunkZ, false);
             org.bukkit.ChunkSnapshot snapshot = chunk.getChunkSnapshot(true, false, false);
             int localX = blockX & 15;
             int localZ = blockZ & 15;
