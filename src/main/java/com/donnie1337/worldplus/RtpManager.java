@@ -352,12 +352,6 @@ public final class RtpManager implements Listener {
         }
 
         if (attempt >= attempts) {
-            if (plugin.getRtpPreGenerator() != null
-                    && plugin.getRtpPreGenerator().isGenerating(settings.id())) {
-                Bukkit.getScheduler().runTaskLater(plugin,
-                        () -> findSafeLocationAsync(player, world, settings, attempts, callback), 2L);
-                return;
-            }
             callback.accept(null);
             return;
         }
