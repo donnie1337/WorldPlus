@@ -70,12 +70,15 @@ public final class RtpManager implements Listener {
         int delay = Math.max(0, plugin.getConfig().getInt("rtp.geral.atraso-segundos", 3));
         pendingWorlds.put(uuid, settings.id());
 
+        if (plugin.getTitleManager() != null) {
+            int stayTicks = delay > 0 && !player.hasPermission("worldplus.rtp.bypass.delay")
+                    ? delay * 20
+                    : plugin.getConfig().getInt("titles.rtp-preparando.duracao", 40);
+            plugin.getTitleManager().showRtpLoading(player, Math.max(1, stayTicks));
+        }
+
         if (delay > 0 && !player.hasPermission("worldplus.rtp.bypass.delay")) {
             delays.put(uuid, System.currentTimeMillis() + delay * 1000L);
-
-            if (plugin.getTitleManager() != null) {
-                plugin.getTitleManager().showRtpLoading(player, delay * 20);
-            }
 
             Bukkit.getScheduler().runTaskLater(plugin, () -> {
                 if (!player.isOnline() || !pendingWorlds.containsKey(uuid)) return;
