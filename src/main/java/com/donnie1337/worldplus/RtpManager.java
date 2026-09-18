@@ -10,7 +10,6 @@ import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.player.PlayerMoveEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
-import org.bukkit.scheduler.BukkitTask;
 
 import java.util.*;
 import java.util.concurrent.ThreadLocalRandom;
@@ -23,8 +22,6 @@ public final class RtpManager implements Listener {
     private final Map<String, Long> heatmap = new HashMap<>();
     private final Set<UUID> processing = new HashSet<>();
     private final Queue<RtpRequest> queue = new ArrayDeque<>();
-    private final Map<UUID, BukkitTask> preloadTasks = new HashMap<>();
-    private final Map<UUID, List<int[]>> preloadTickets = new HashMap<>();
 
     public RtpManager(WorldPlus plugin) {
         this.plugin = plugin;
@@ -121,8 +118,9 @@ public final class RtpManager implements Listener {
         // A variável world acima pode ser reatribuída durante o carregamento.
         final World rtpWorld = world;
 
-        // No primeiro uso do RTP, mostra o title de preparação.
-        // O title de bioma será exibido assim que o jogador chegar ao destino.
+        // O RTP escolhe uma única coordenada aleatória e trabalha somente com a
+        // chunk que contém essa coordenada. Assim que a chunk estiver pronta e
+        // o bloco de superfície for validado, o jogador é teleportado imediatamente.
         int attempts = Math.max(1, plugin.getConfig().getInt("rtp.geral.max-tentativas", 32));
         findSafeLocationAsync(player, rtpWorld, settings, attempts, safe -> {
             if (safe == null) {
@@ -131,74 +129,18 @@ public final class RtpManager implements Listener {
                 return;
             }
 
-            preloadAndTeleport(player, rtpWorld, safe, settings);
-
-        });
-    }
-
-    private void preloadAndTeleport(Player player, World world, Location safe, WorldSettings settings) {
-        UUID uuid = player.getUniqueId();
-        int seconds = Math.max(1, plugin.getConfig().getInt("rtp.geral.pre-carregar-segundos", 3));
-        int waitTicks = seconds * 20;
-
-        if (plugin.getTitleManager() != null) {
-            plugin.getTitleManager().showRtpLoading(player, waitTicks);
-        }
-
-        // A chunk do destino já foi gerada/analisada antes desta etapa.
-        // NÃO carregamos uma grade 3x3 aqui: loadChunk/addPluginChunkTicket
-        // podem carregar uma chunk imediatamente no thread principal.
-        // Isso foi a causa do travamento observado em RTP.
-        int targetChunkX = safe.getBlockX() >> 4;
-        int targetChunkZ = safe.getBlockZ() >> 4;
-        List<int[]> tickets = new ArrayList<>();
-
-        try {
-            if (world.isChunkLoaded(targetChunkX, targetChunkZ)
-                    && world.addPluginChunkTicket(targetChunkX, targetChunkZ, plugin)) {
-                tickets.add(new int[]{targetChunkX, targetChunkZ});
-            }
-        } catch (Throwable throwable) {
-            plugin.getLogger().warning("Falha ao manter a chunk do destino do RTP carregada em "
-                    + targetChunkX + "," + targetChunkZ + " no mundo " + world.getName()
-                    + ": " + throwable.getMessage());
-        }
-
-        preloadTickets.put(uuid, tickets);
-        BukkitTask oldTask = preloadTasks.remove(uuid);
-        if (oldTask != null) oldTask.cancel();
-
-        BukkitTask task = Bukkit.getScheduler().runTaskLater(plugin, () -> {
-            preloadTasks.remove(uuid);
-            if (!player.isOnline()) {
-                releasePreloadTickets(world, tickets);
-                finish(player);
-                return;
-            }
-
             player.teleport(safe);
             if (plugin.getTitleManager() != null) {
                 plugin.getTitleManager().showBiomeAfterRtp(player, safe);
             }
+
+            UUID uuid = player.getUniqueId();
             cooldowns.put(uuid, System.currentTimeMillis() + cooldownSeconds(settings) * 1000L);
-            heatmap.merge(world.getName(), 1L, Long::sum);
-            // Teleporte concluído sem mensagem no chat.
-
-            releasePreloadTickets(world, tickets);
-            preloadTickets.remove(uuid);
+            heatmap.merge(rtpWorld.getName(), 1L, Long::sum);
+            // Depois do teleporte, a própria presença do jogador mantém/carrega
+            // a chunk de destino conforme a distância de renderização do servidor.
             finish(player);
-        }, waitTicks);
-
-        preloadTasks.put(uuid, task);
-    }
-
-    private void releasePreloadTickets(World world, List<int[]> tickets) {
-        for (int[] ticket : tickets) {
-            try {
-                world.removePluginChunkTicket(ticket[0], ticket[1], plugin);
-            } catch (Throwable ignored) {
-            }
-        }
+        });
     }
 
     private void finish(Player player) {
@@ -210,181 +152,72 @@ public final class RtpManager implements Listener {
 
     private void findSafeLocationAsync(Player player, World world, WorldSettings settings, int attempts,
                                        java.util.function.Consumer<Location> callback) {
-        // O RTP percorre a área inteira da WorldBorder, sem raio mínimo/máximo
-        // configurado. O sorteio é uniforme em X/Z dentro do quadrado da borda,
-        // mantendo uma pequena margem para evitar posições exatamente no limite.
         org.bukkit.WorldBorder border = world.getWorldBorder();
         Location borderCenter = border.getCenter();
+
+        // O sorteio usa toda a área útil da WorldBorder.
         double halfSize = Math.max(1.0D, border.getSize() / 2.0D - 16.0D);
         double centerX = borderCenter.getX();
         double centerZ = borderCenter.getZ();
-        boolean useBorder = true;
-        double minRadius = 0.0D;
-        double maxRadius = halfSize;
-        String shape = "square";
 
         int minY = plugin.getConfig().getInt("rtp.mundos." + settings.id() + ".y-minimo", 0);
         int maxY = plugin.getConfig().getInt("rtp.mundos." + settings.id() + ".y-maximo", 320);
 
-        findCandidate(player, world, settings, attempts, 0, minRadius, maxRadius, useBorder,
-                centerX, centerZ, shape, minY, maxY, callback);
+        findCandidate(player, world, settings, attempts, 0, centerX, centerZ, halfSize, minY, maxY, callback);
     }
 
     private void findCandidate(Player player, World world, WorldSettings settings, int attempts, int attempt,
-                               double minRadius, double maxRadius, boolean useBorder,
-                               double centerX, double centerZ, String shape, int minY, int maxY,
+                               double centerX, double centerZ, double halfSize, int minY, int maxY,
                                java.util.function.Consumer<Location> callback) {
         if (!player.isOnline() || attempt >= attempts) {
             callback.accept(null);
             return;
         }
 
-        double x;
-        double z;
-        if ("square".equalsIgnoreCase(shape)) {
-            x = centerX + randomBetween(-maxRadius, maxRadius);
-            z = centerZ + randomBetween(-maxRadius, maxRadius);
-            if (Math.abs(x - centerX) < minRadius && Math.abs(z - centerZ) < minRadius) {
-                Bukkit.getScheduler().runTaskLater(plugin, () -> findCandidate(player, world, settings, attempts, attempt + 1,
-                        minRadius, maxRadius, useBorder, centerX, centerZ, shape, minY, maxY, callback), 1L);
-                return;
-            }
-        } else {
-            double angle = ThreadLocalRandom.current().nextDouble(0, Math.PI * 2);
-            double radius = Math.sqrt(ThreadLocalRandom.current().nextDouble(
-                    minRadius * minRadius,
-                    Math.max(minRadius * minRadius + 1, maxRadius * maxRadius)));
-            x = centerX + Math.cos(angle) * radius;
-            z = centerZ + Math.sin(angle) * radius;
-        }
+        double x = centerX + randomBetween(-halfSize, halfSize);
+        double z = centerZ + randomBetween(-halfSize, halfSize);
 
         int blockX = (int) Math.floor(x);
         int blockZ = (int) Math.floor(z);
-        if (useBorder && !world.getWorldBorder().isInside(new Location(world, blockX, 64, blockZ))) {
-            Bukkit.getScheduler().runTaskLater(plugin, () -> findCandidate(player, world, settings, attempts, attempt + 1,
-                    minRadius, maxRadius, useBorder, centerX, centerZ, shape, minY, maxY, callback), 1L);
+        if (!world.getWorldBorder().isInside(new Location(world, blockX, 64, blockZ))) {
+            retryCandidate(player, world, settings, attempts, attempt, centerX, centerZ, halfSize, minY, maxY, callback);
             return;
         }
 
         int chunkX = blockX >> 4;
         int chunkZ = blockZ >> 4;
 
-        // Nunca usamos getChunkAt(..., true) nem addPluginChunkTicket() aqui:
-        // ambos podem carregar/gerar a chunk imediatamente no thread principal.
-        // A geração nova é encaminhada para o pipeline NMS em uma tarefa assíncrona.
-        // O future pode aguardar a geração sem bloquear o Server thread; quando terminar,
-        // voltamos para a thread principal somente para analisar o snapshot.
-        if (!world.isChunkGenerated(chunkX, chunkZ)) {
-            final int nextAttempt = attempt + 1;
-            requestChunkGenerationAsync(player, world, chunkX, chunkZ, generated -> {
-                if (!player.isOnline()) {
-                    callback.accept(null);
-                    return;
-                }
-
-                if (!generated) {
-                    Bukkit.getScheduler().runTaskLater(plugin, () -> findCandidate(player, world, settings, attempts, nextAttempt,
-                            minRadius, maxRadius, useBorder, centerX, centerZ, shape, minY, maxY, callback), 1L);
-                    return;
-                }
-
-                try {
-                    Location safe = analyzeChunkForSurface(world, chunkX, chunkZ, minY, maxY);
-                    if (safe != null) {
-                        callback.accept(safe);
-                        return;
-                    }
-                } catch (Throwable throwable) {
-                    plugin.getLogger().warning("Falha ao analisar chunk do RTP em " + chunkX + "," + chunkZ
-                            + " no mundo " + world.getName() + ": " + throwable.getMessage());
-                }
-
-                Bukkit.getScheduler().runTaskLater(plugin, () -> findCandidate(player, world, settings, attempts, nextAttempt,
-                        minRadius, maxRadius, useBorder, centerX, centerZ, shape, minY, maxY, callback), 1L);
-            });
-            return;
-        }
-
+        // Somente UMA chunk é carregada/verificada por tentativa.
+        // Não existe preload 3x3, ticket permanente ou varredura de outras chunks.
         try {
+            if (!world.isChunkGenerated(chunkX, chunkZ)) {
+                // Esta é a única operação de geração do candidato. Ela é executada
+                // uma vez, e somente para a chunk escolhida aleatoriamente.
+                world.loadChunk(chunkX, chunkZ, true);
+            } else if (!world.isChunkLoaded(chunkX, chunkZ)) {
+                world.loadChunk(chunkX, chunkZ, false);
+            }
+
             Location safe = analyzeChunkForSurface(world, chunkX, chunkZ, minY, maxY);
             if (safe != null) {
                 callback.accept(safe);
                 return;
             }
-
-            Bukkit.getScheduler().runTaskLater(plugin, () -> findCandidate(player, world, settings, attempts, attempt + 1,
-                    minRadius, maxRadius, useBorder, centerX, centerZ, shape, minY, maxY, callback), 1L);
         } catch (Throwable throwable) {
-            plugin.getLogger().warning("Falha ao analisar chunk do RTP em " + chunkX + "," + chunkZ
-                    + " no mundo " + world.getName() + ": " + throwable.getMessage());
-            Bukkit.getScheduler().runTaskLater(plugin, () -> findCandidate(player, world, settings, attempts, attempt + 1,
-                    minRadius, maxRadius, useBorder, centerX, centerZ, shape, minY, maxY, callback), 1L);
+            plugin.getLogger().warning("Falha ao preparar a única chunk do RTP em "
+                    + chunkX + "," + chunkZ + " no mundo " + world.getName()
+                    + ": " + throwable.getMessage());
         }
+
+        retryCandidate(player, world, settings, attempts, attempt, centerX, centerZ, halfSize, minY, maxY, callback);
     }
 
-    private void requestChunkGenerationAsync(Player player, World world, int chunkX, int chunkZ,
-                                               java.util.function.Consumer<Boolean> callback) {
-        if (!plugin.isEnabled() || !player.isOnline()) {
-            callback.accept(false);
-            return;
-        }
-
-        if (world.isChunkGenerated(chunkX, chunkZ)) {
-            callback.accept(true);
-            return;
-        }
-
-        // A geração real precisa acontecer pelo próprio servidor. O ticket Bukkit
-        // é criado em um tick separado e a conclusão é verificada sem polling recursivo.
-        Bukkit.getScheduler().runTaskLater(plugin, () -> {
-            if (!plugin.isEnabled() || !player.isOnline()) {
-                callback.accept(false);
-                return;
-            }
-
-            try {
-                world.addPluginChunkTicket(chunkX, chunkZ, plugin);
-                waitForGeneratedChunk(player, world, chunkX, chunkZ, 0, callback);
-            } catch (Throwable throwable) {
-                plugin.getLogger().warning("Falha ao solicitar geração da chunk do RTP em "
-                        + chunkX + "," + chunkZ + " no mundo " + world.getName()
-                        + ": " + throwable.getMessage());
-                callback.accept(false);
-            }
-        }, 1L);
-    }
-
-    private void waitForGeneratedChunk(Player player, World world, int chunkX, int chunkZ,
-                                        int ticks, java.util.function.Consumer<Boolean> callback) {
-        if (!plugin.isEnabled() || !player.isOnline()) {
-            releaseGenerationTicket(world, chunkX, chunkZ);
-            callback.accept(false);
-            return;
-        }
-
-        if (world.isChunkGenerated(chunkX, chunkZ)) {
-            releaseGenerationTicket(world, chunkX, chunkZ);
-            callback.accept(true);
-            return;
-        }
-
-        if (ticks >= 400) {
-            releaseGenerationTicket(world, chunkX, chunkZ);
-            callback.accept(false);
-            return;
-        }
-
-        // Um tick entre verificações evita tanto bloqueio quanto recursão no mesmo tick.
+    private void retryCandidate(Player player, World world, WorldSettings settings, int attempts, int attempt,
+                                double centerX, double centerZ, double halfSize, int minY, int maxY,
+                                java.util.function.Consumer<Location> callback) {
         Bukkit.getScheduler().runTaskLater(plugin,
-                () -> waitForGeneratedChunk(player, world, chunkX, chunkZ, ticks + 1, callback), 1L);
-    }
-
-    private void releaseGenerationTicket(World world, int chunkX, int chunkZ) {
-        if (!plugin.isEnabled()) return;
-        try {
-            world.removePluginChunkTicket(chunkX, chunkZ, plugin);
-        } catch (Throwable ignored) {
-        }
+                () -> findCandidate(player, world, settings, attempts, attempt + 1,
+                        centerX, centerZ, halfSize, minY, maxY, callback), 1L);
     }
 
     private Location analyzeChunkForSurface(World world, int chunkX, int chunkZ, int minY, int maxY) {
@@ -532,15 +365,6 @@ public final class RtpManager implements Listener {
         delays.remove(uuid);
         processing.remove(uuid);
 
-        BukkitTask preloadTask = preloadTasks.remove(uuid);
-        if (preloadTask != null) preloadTask.cancel();
-
-        List<int[]> tickets = preloadTickets.remove(uuid);
-        if (tickets != null) {
-            Player player = event.getPlayer();
-            World world = player.getWorld();
-            releasePreloadTickets(world, tickets);
-        }
     }
 
     private void message(Player player, String key, String fallback, String placeholder, String value) {
