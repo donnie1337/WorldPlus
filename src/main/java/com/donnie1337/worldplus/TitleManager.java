@@ -37,6 +37,17 @@ public final class TitleManager implements Listener {
                 "titles.rtp-preparando");
     }
 
+    public void showRtpLoading(Player player, int stayTicks) {
+        if (!plugin.getConfig().getBoolean("titles.rtp-preparando.habilitado", true)) return;
+
+        int fadeIn = plugin.getConfig().getInt("titles.rtp-preparando.fade-in", 10);
+        int fadeOut = plugin.getConfig().getInt("titles.rtp-preparando.fade-out", 10);
+        sendTitle(player,
+                plugin.getConfig().getString("titles.rtp-preparando.titulo", "&b&lᴛᴇʟᴇᴘᴏʀᴛᴇ"),
+                plugin.getConfig().getString("titles.rtp-preparando.subtitulo", "&7Preparando seu destino..."),
+                fadeIn, Math.max(1, stayTicks), fadeOut);
+    }
+
     public void showBiome(Player player, Location location) {
         if (!plugin.getConfig().getBoolean("titles.bioma.habilitado", true) || location == null) return;
 
@@ -79,6 +90,10 @@ public final class TitleManager implements Listener {
         int fadeIn = plugin.getConfig().getInt(path + ".fade-in", 10);
         int stay = plugin.getConfig().getInt(path + ".duracao", 40);
         int fadeOut = plugin.getConfig().getInt(path + ".fade-out", 10);
+        sendTitle(player, title, subtitle, fadeIn, stay, fadeOut);
+    }
+
+    private void sendTitle(Player player, String title, String subtitle, int fadeIn, int stay, int fadeOut) {
         player.sendTitle(color(title), color(subtitle), fadeIn, stay, fadeOut);
     }
 
