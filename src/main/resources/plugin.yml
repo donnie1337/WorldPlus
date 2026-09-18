@@ -8,7 +8,7 @@ description: Geração e gerenciamento configurável de mundos no Spigot.
 commands:
   mundos:
     description: Gerencia os mundos configurados do WorldPlus.
-    usage: /mundos <lista|info|tp|spawn|setspawn|criar|recarregar>
+    usage: /mundos <lista|info|tp|spawn|setspawn|criar|excluir|recarregar>
     aliases: [mundo, worlds]
     permission: worldplus.use
 
