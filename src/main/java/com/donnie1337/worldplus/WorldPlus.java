@@ -156,7 +156,7 @@ public final class WorldPlus extends JavaPlugin {
                 world.getEnderDragonBattle().setPreviouslyKilled(true);
             }
             for (var entity : world.getEntities()) {
-                if (entity instanceof EnderDragon || entity.getType() == EntityType.ENDER_CRYSTAL) {
+                if (entity instanceof EnderDragon || entity.getType() == EntityType.END_CRYSTAL) {
                     entity.remove();
                 }
             }
