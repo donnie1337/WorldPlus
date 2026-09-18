@@ -139,6 +139,147 @@ rtp:
       y-maximo: 320
       cooldown-segundos: 15
 
+# ============================================================
+# Titles
+# ============================================================
+# O title de RTP aparece somente no primeiro RTP do jogador durante
+# a sessão. Depois disso, o sistema mostra o bioma sempre que ele
+# entrar em um bioma diferente.
+
+titles:
+  rtp-preparando:
+    habilitado: true
+    titulo: "&b&lᴛᴇʟᴇᴘᴏʀᴛᴇ"
+    subtitulo: "&7Preparando seu destino..."
+    fade-in: 10
+    duracao: 40
+    fade-out: 10
+
+  bioma:
+    habilitado: true
+    titulo: "&a&l{bioma}"
+    subtitulo: "&7Você está {artigo} &f{bioma}"
+    fade-in: 5
+    duracao: 40
+    fade-out: 10
+
+  # Nomes personalizados dos biomas.
+  # Se um bioma não estiver listado, o WorldPlus formata
+  # automaticamente o nome técnico do Minecraft.
+  biomas:
+    savanna: "Savanna"
+    desert: "Deserto"
+    plains: "Planícies"
+    forest: "Floresta"
+    jungle: "Selva"
+    bamboo_jungle: "Selva de Bambu"
+    swamp: "Pântano"
+    mangrove_swamp: "Pântano de Mangue"
+    taiga: "Taiga"
+    snowy_taiga: "Taiga Nevada"
+    snowy_plains: "Planícies Nevadas"
+    meadow: "Prado"
+    cherry_grove: "Bosque de Cerejeiras"
+    grove: "Bosque"
+    windswept_hills: "Montanhas"
+    windswept_forest: "Floresta Montanhosa"
+    windswept_gravelly_hills: "Colinas Rochosas"
+    windswept_savanna: "Savanna Montanhosa"
+    jagged_peaks: "Picos Escarpados"
+    frozen_peaks: "Picos Congelados"
+    stony_peaks: "Picos Rochosos"
+    ocean: "Oceano"
+    deep_ocean: "Oceano Profundo"
+    cold_ocean: "Oceano Frio"
+    frozen_ocean: "Oceano Congelado"
+    warm_ocean: "Oceano Quente"
+    river: "Rio"
+    frozen_river: "Rio Congelado"
+    beach: "Praia"
+    stony_shore: "Costa Rochosa"
+    badlands: "Badlands"
+    wooded_badlands: "Badlands Arborizadas"
+    eroded_badlands: "Badlands Erodidas"
+    mushroom_fields: "Campos de Cogumelos"
+    ice_spikes: "Espinhos de Gelo"
+    dark_forest: "Floresta Escura"
+    birch_forest: "Floresta de Bétulas"
+    flower_forest: "Floresta de Flores"
+    sparse_jungle: "Selva Esparsa"
+    old_growth_pine_taiga: "Taiga de Pinheiros Antigos"
+    old_growth_spruce_taiga: "Taiga de Abetos Antigos"
+    sunflower_plains: "Planícies de Girassóis"
+    deep_dark: "Escuridão Profunda"
+    dripstone_caves: "Cavernas de Dripstone"
+    lush_caves: "Cavernas Exuberantes"
+    nether_wastes: "Dunas do Nether"
+    soul_sand_valley: "Vale das Areias das Almas"
+    crimson_forest: "Floresta Carmesim"
+    warped_forest: "Floresta Distorcida"
+    basalt_deltas: "Deltas de Basalto"
+    the_end: "O End"
+    end_highlands: "Terras Altas do End"
+    end_midlands: "Terras Médias do End"
+    small_end_islands: "Pequenas Ilhas do End"
+    end_barrens: "Ermos do End"
+
+  artigos:
+    savanna: "na"
+    desert: "no"
+    plains: "nas"
+    forest: "na"
+    jungle: "na"
+    bamboo_jungle: "na"
+    swamp: "no"
+    mangrove_swamp: "no"
+    taiga: "na"
+    snowy_taiga: "na"
+    snowy_plains: "nas"
+    meadow: "no"
+    cherry_grove: "no"
+    grove: "no"
+    windswept_hills: "nas"
+    windswept_forest: "na"
+    windswept_gravelly_hills: "nas"
+    windswept_savanna: "na"
+    jagged_peaks: "nos"
+    frozen_peaks: "nos"
+    stony_peaks: "nos"
+    ocean: "no"
+    deep_ocean: "no"
+    cold_ocean: "no"
+    frozen_ocean: "no"
+    warm_ocean: "no"
+    river: "no"
+    frozen_river: "no"
+    beach: "na"
+    stony_shore: "na"
+    badlands: "nas"
+    wooded_badlands: "nas"
+    eroded_badlands: "nas"
+    mushroom_fields: "nos"
+    ice_spikes: "nos"
+    dark_forest: "na"
+    birch_forest: "na"
+    flower_forest: "na"
+    sparse_jungle: "na"
+    old_growth_pine_taiga: "na"
+    old_growth_spruce_taiga: "na"
+    sunflower_plains: "nas"
+    deep_dark: "na"
+    dripstone_caves: "nas"
+    lush_caves: "nas"
+    nether_wastes: "nas"
+    soul_sand_valley: "no"
+    crimson_forest: "na"
+    warped_forest: "na"
+    basalt_deltas: "nos"
+    the_end: "no"
+    end_highlands: "nas"
+    end_midlands: "nas"
+    small_end_islands: "nas"
+    end_barrens: "nos"
+
 mensagens:
   prefixo: "&7&lᴡᴏʀʟᴅᴘʟᴜs &8• &r"
   sem-permissao: "&cVocê não tem permissão para executar este comando."
