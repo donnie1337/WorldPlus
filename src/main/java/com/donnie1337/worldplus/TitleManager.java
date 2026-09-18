@@ -61,31 +61,20 @@ public final class TitleManager implements Listener {
         String biomeName = displayName(biome);
         String article = article(biome);
 
-        String title = plugin.getConfig().getString(
-                "titles.bioma.padrao.titulo",
-                "&fVocê está {artigo}");
-        String subtitle = plugin.getConfig().getString(
-                "titles.bioma.padrao.subtitulo",
-                "&f&l{bioma}");
+        String message = plugin.getConfig().getString(
+                "titles.bioma." + biomeKey + ".mensagem");
 
-        String customTitle = plugin.getConfig().getString(
-                "titles.biomas." + biomeKey + ".titulo");
-        String customSubtitle = plugin.getConfig().getString(
-                "titles.biomas." + biomeKey + ".subtitulo");
-
-        if (customTitle != null && !customTitle.isBlank()) {
-            title = customTitle;
-        }
-        if (customSubtitle != null && !customSubtitle.isBlank()) {
-            subtitle = customSubtitle;
+        if (message == null || message.isBlank()) {
+            message = plugin.getConfig().getString(
+                    "titles.bioma.mensagem-padrao",
+                    "&fVocê está {artigo} {bioma}");
         }
 
-        sendTitle(player,
-                title.replace("{bioma}", biomeName).replace("{artigo}", article),
-                subtitle.replace("{bioma}", biomeName).replace("{artigo}", article),
-                "titles.bioma");
+        message = message.replace("{bioma}", biomeName)
+                .replace("{artigo}", article);
+
+        sendTitle(player, message, "", "titles.bioma");
     }
-
     private void sendTitle(Player player, String title, String subtitle, String path) {
         int fadeIn = plugin.getConfig().getInt(path + ".fade-in", 10);
         int stay = plugin.getConfig().getInt(path + ".duracao", 40);
@@ -94,7 +83,8 @@ public final class TitleManager implements Listener {
     }
 
     private String displayName(Biome biome) {
-        String configured = plugin.getConfig().getString("titles.biomas." + biome.getKey().getKey() + ".nome");
+        String configured = plugin.getConfig().getString(
+                "titles.bioma." + biome.getKey().getKey() + ".nome");
         if (configured != null && !configured.isBlank()) return color(configured);
 
         String raw = biome.getKey().getKey().replace('_', ' ').toLowerCase(Locale.ROOT);
@@ -106,14 +96,12 @@ public final class TitleManager implements Listener {
         }
         return result.toString();
     }
-
     private String article(Biome biome) {
-        String configured = plugin.getConfig().getString("titles.biomas." + biome.getKey().getKey() + ".artigo");
+        String configured = plugin.getConfig().getString(
+                "titles.bioma." + biome.getKey().getKey() + ".artigo");
         if (configured != null && !configured.isBlank()) return configured;
-
-        return plugin.getConfig().getString("titles.bioma.padrao.artigo", "no");
+        return plugin.getConfig().getString("titles.bioma.artigo-padrao", "no");
     }
-
     private String color(String text) {
         return ChatColor.translateAlternateColorCodes('&', text == null ? "" : text);
     }
