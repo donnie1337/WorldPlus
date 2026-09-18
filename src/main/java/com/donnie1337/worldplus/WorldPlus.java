@@ -46,6 +46,8 @@ public final class WorldPlus extends JavaPlugin {
         if (getConfig().getBoolean("configuracao.criar-mundos-automaticamente", true)) {
             for (WorldSettings settings : worlds.values()) createOrLoadWorld(settings);
         }
+        getServer().getPluginManager().registerEvents(new WorldPortalListener(this), this);
+        getLogger().info("WorldPlus: portais de Nether e End conectados.");
         getLogger().info("WorldPlus ativado.");
     }
 
@@ -93,6 +95,15 @@ public final class WorldPlus extends JavaPlugin {
     }
 
     public Map<String, WorldSettings> getWorlds() { return worlds; }
+
+    public World getDimensionWorld(String id, World.Environment environment) {
+        WorldSettings settings = getSettings(id);
+        if (settings == null || settings.environment() != environment) {
+            return null;
+        }
+        World world = Bukkit.getWorld(settings.name());
+        return world != null ? world : createOrLoadWorld(settings);
+    }
 
     public WorldSettings getSettings(String id) {
         return id == null ? null : worlds.get(id.toLowerCase());
