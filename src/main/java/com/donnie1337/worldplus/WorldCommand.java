@@ -2,6 +2,8 @@ package com.donnie1337.worldplus;
 
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
+import org.bukkit.Location;
+import org.bukkit.Material;
 import org.bukkit.World;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
@@ -48,6 +50,44 @@ public final class WorldCommand implements CommandExecutor, TabCompleter {
                         .replace("{pvp}", s.pvp() ? "&aATIVO" : "&cDESATIVADO")
                         .replace("{inventory}", s.keepInventory() ? "&aPRESERVADO" : "&cNORMAL")
                         .replace("{difficulty}", s.difficulty().name())));
+                return true;
+            }
+            case "borda", "border" -> {
+                if (!sender.hasPermission("worldplus.teleport")) return noPermission(sender);
+                if (!(sender instanceof Player player)) return jogadorApenas(sender);
+
+                String worldId = findCurrentWorldId(player);
+                String direction = null;
+                if (args.length >= 2) {
+                    if (isDirection(args[1])) {
+                        direction = args[1];
+                    } else {
+                        worldId = args[1];
+                    }
+                }
+                if (args.length >= 3) {
+                    if (!isDirection(args[2])) return usoBorda(sender);
+                    direction = args[2];
+                }
+
+                if (worldId == null) return notFound(sender, "");
+                WorldSettings settings = plugin.getSettings(worldId);
+                if (settings == null) return notFound(sender, worldId);
+
+                World world = Bukkit.getWorld(settings.name());
+                if (world == null) world = plugin.createOrLoadWorld(settings);
+                if (world == null) return error(sender, settings.id());
+
+                Location target = borderLocation(player, world, direction);
+                if (target == null) {
+                    player.sendMessage(color(msg("borda-sem-local", "&cNão foi encontrado um local seguro próximo à borda de &f{id}&c.")
+                            .replace("{id}", settings.id())));
+                    return true;
+                }
+
+                player.teleport(target);
+                player.sendMessage(color(msg("borda-teleporte", "&aTeleportado para a borda de &f{id}&a.")
+                        .replace("{id}", settings.id())));
                 return true;
             }
             case "tp", "teleportar" -> {
@@ -168,6 +208,108 @@ public final class WorldCommand implements CommandExecutor, TabCompleter {
         return null;
     }
 
+    private Location borderLocation(Player player, World world, String direction) {
+        org.bukkit.WorldBorder border = world.getWorldBorder();
+        Location center = border.getCenter();
+        double half = border.getSize() / 2.0D;
+        double minX = center.getX() - half;
+        double maxX = center.getX() + half;
+        double minZ = center.getZ() - half;
+        double maxZ = center.getZ() + half;
+        double margin = 5.0D;
+
+        String side = direction == null ? nearestSide(player.getLocation(), minX, maxX, minZ, maxZ) : direction.toLowerCase();
+        double x = Math.max(minX + margin, Math.min(maxX - margin, player.getLocation().getX()));
+        double z = Math.max(minZ + margin, Math.min(maxZ - margin, player.getLocation().getZ()));
+
+        switch (side) {
+            case "norte" -> z = minZ + margin;
+            case "sul" -> z = maxZ - margin;
+            case "leste" -> x = maxX - margin;
+            case "oeste" -> x = minX + margin;
+            default -> { return null; }
+        }
+
+        Location safe = findSafeBorderLocation(world, x, z, side);
+        if (safe == null) return null;
+
+        float yaw = switch (side) {
+            case "norte" -> 180.0F;
+            case "sul" -> 0.0F;
+            case "leste" -> 270.0F;
+            case "oeste" -> 90.0F;
+            default -> player.getLocation().getYaw();
+        };
+        safe.setYaw(yaw);
+        safe.setPitch(0.0F);
+        return safe;
+    }
+
+    private String nearestSide(Location location, double minX, double maxX, double minZ, double maxZ) {
+        double north = Math.abs(location.getZ() - minZ);
+        double south = Math.abs(maxZ - location.getZ());
+        double west = Math.abs(location.getX() - minX);
+        double east = Math.abs(maxX - location.getX());
+        double minimum = Math.min(Math.min(north, south), Math.min(west, east));
+        if (minimum == north) return "norte";
+        if (minimum == south) return "sul";
+        if (minimum == east) return "leste";
+        return "oeste";
+    }
+
+    private Location findSafeBorderLocation(World world, double x, double z, String side) {
+        for (int offset = 0; offset <= 64; offset += 4) {
+            for (int lateral = -offset; lateral <= offset; lateral += 4) {
+                double candidateX = x;
+                double candidateZ = z;
+                if (side.equals("norte") || side.equals("sul")) {
+                    candidateX += lateral;
+                    if (offset > 0) candidateZ += side.equals("norte") ? offset : -offset;
+                } else {
+                    candidateZ += lateral;
+                    if (offset > 0) candidateX += side.equals("oeste") ? offset : -offset;
+                }
+
+                org.bukkit.WorldBorder border = world.getWorldBorder();
+                if (!border.isInside(new Location(world, candidateX, 0, candidateZ))) continue;
+
+                int blockX = Location.locToBlock(candidateX);
+                int blockZ = Location.locToBlock(candidateZ);
+                int top = world.getMaxHeight() - 2;
+                int bottom = world.getMinHeight() + 1;
+
+                for (int y = top; y >= bottom; y--) {
+                    Material floor = world.getBlockAt(blockX, y, blockZ).getType();
+                    Material feet = world.getBlockAt(blockX, y + 1, blockZ).getType();
+                    Material head = world.getBlockAt(blockX, y + 2, blockZ).getType();
+
+                    if (!floor.isSolid() || floor == Material.BEDROCK) continue;
+                    if (!isSafeAir(feet) || !isSafeAir(head)) continue;
+                    if (feet.isLiquid() || head.isLiquid()) continue;
+
+                    return new Location(world, blockX + 0.5D, y + 1.0D, blockZ + 0.5D);
+                }
+            }
+        }
+        return null;
+    }
+
+    private boolean isSafeAir(Material material) {
+        return material.isAir();
+    }
+
+    private boolean isDirection(String value) {
+        return value != null && switch (value.toLowerCase()) {
+            case "norte", "north", "sul", "south", "leste", "east", "oeste", "west" -> true;
+            default -> false;
+        };
+    }
+
+    private boolean usoBorda(CommandSender sender) {
+        sender.sendMessage(color(msg("uso-borda", "&cUso: /mundos borda [mundo] [norte|sul|leste|oeste]")));
+        return true;
+    }
+
     private boolean noPermission(CommandSender sender) {
         sender.sendMessage(color(msg("sem-permissao", "&cVocê não tem permissão para executar este comando.")));
         return true;
@@ -204,9 +346,13 @@ public final class WorldCommand implements CommandExecutor, TabCompleter {
     @Override
     public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] args) {
         if (!sender.hasPermission("worldplus.use")) return Collections.emptyList();
-        if (args.length == 1) return partial(List.of("lista", "info", "tp", "spawn", "setspawn", "criar", "excluir", "recarregar"), args[0]);
-        if (args.length == 2 && List.of("info", "tp", "spawn", "setspawn", "criar", "excluir").contains(args[0].toLowerCase()))
+        if (args.length == 1) return partial(List.of("lista", "info", "tp", "borda", "spawn", "setspawn", "criar", "excluir", "recarregar"), args[0]);
+        if (args.length == 2 && List.of("info", "tp", "borda", "spawn", "setspawn", "criar", "excluir").contains(args[0].toLowerCase()))
             return partial(new ArrayList<>(plugin.getWorlds().keySet()), args[1]);
+        if (args.length == 3 && args[0].equalsIgnoreCase("borda")) {
+            if (isDirection(args[1])) return partial(List.of("norte", "sul", "leste", "oeste"), args[2]);
+            return partial(List.of("norte", "sul", "leste", "oeste"), args[2]);
+        }
         if (args.length == 3 && args[0].equalsIgnoreCase("tp") && sender.hasPermission("worldplus.admin"))
             return partial(Bukkit.getOnlinePlayers().stream().map(Player::getName).toList(), args[2]);
         return Collections.emptyList();
