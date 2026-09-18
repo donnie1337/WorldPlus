@@ -107,15 +107,10 @@ public final class RtpCommand implements CommandExecutor, TabCompleter, Listener
         if (item == null || !item.hasItemMeta() || item.getItemMeta().getDisplayName() == null) return;
         String id = item.getItemMeta().getPersistentDataContainer().get(worldKey, PersistentDataType.STRING);
         if (id != null && plugin.getSettings(id) != null) {
-            // InventoryClickEvent acontece durante o processamento do inventário.
-            // Fechar a janela imediatamente aqui pode interromper a transação antes
-            // de o RTP ser solicitado. O fechamento e a chamada do manager ficam
-            // para o próximo tick.
-            Bukkit.getScheduler().runTask(plugin, () -> {
-                if (!player.isOnline()) return;
-                player.closeInventory();
-                manager.request(player, id);
-            });
+            // Fecha o GUI imediatamente no próprio evento de clique.
+            // O pedido do RTP começa no mesmo tick, sem tarefa intermediária.
+            player.closeInventory();
+            manager.request(player, id);
         }
     }
 
