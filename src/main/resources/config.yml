@@ -1,0 +1,62 @@
+# ============================================================
+# WorldPlus
+# Geração e gerenciamento de mundos
+# ============================================================
+
+configuracao:
+  criar-mundos-automaticamente: true
+  aplicar-datapack-sem-stronghold: true
+  mensagem-console: true
+
+# Tamanho da borda em blocos.
+# 10000 = 10.000 x 10.000 blocos.
+#
+# IMPORTANTE:
+# Para que Overworld e Mineração realmente não tenham Strongholds,
+# o datapack do WorldPlus precisa estar presente ANTES da criação
+# do mundo. Para mundos já existentes, será necessário recriá-los.
+mundos:
+
+  overworld:
+    nome: "world"
+    ambiente: "NORMAL"
+    seed: -847392615028471936
+    tamanho: 10000
+    estruturas: true
+    remover-strongholds: true
+
+  mineracao:
+    nome: "mining"
+    ambiente: "NORMAL"
+    seed: 593817204761928405
+    tamanho: 10000
+    estruturas: true
+    remover-strongholds: true
+
+  nether:
+    nome: "world_nether"
+    ambiente: "NETHER"
+    seed: -2615049381726503847
+    tamanho: 10000
+    estruturas: true
+    remover-strongholds: false
+
+  end:
+    nome: "world_the_end"
+    ambiente: "THE_END"
+    seed: 731946205817394602
+    tamanho: 10000
+    estruturas: true
+    remover-strongholds: false
+
+mensagens:
+  prefixo: "&7&lᴡᴏʀʟᴅᴘʟᴜs &8• &r"
+  sem-permissao: "&cVocê não tem permissão para executar este comando."
+  uso: "&cUso: /mundos <lista|criar|tp|recarregar>"
+  mundo-nao-encontrado: "&cMundo configurado não encontrado: &f{id}&c."
+  mundo-criado: "&aMundo &f{id} &acriado/carregado com sucesso."
+  mundo-ja-carregado: "&eMundo &f{id} &ejá está carregado."
+  recarregado: "&aConfiguração recarregada."
+  jogador-apenas: "&cEste comando precisa ser executado por um jogador."
+  teleporte: "&aTeleportado para &f{id}&a."
+  erro: "&cNão foi possível criar/carregar o mundo &f{id}&c."
