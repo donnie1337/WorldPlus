@@ -37,21 +37,6 @@ public final class RtpCommand implements CommandExecutor, TabCompleter, Listener
                 color(plugin.getConfig().getString("rtp.gui.titulo", "&8&lRTP &8• &fEscolha o mundo"))
         );
 
-        Material separador = Material.GRAY_STAINED_GLASS_PANE;
-        ItemStack vidro = new ItemStack(separador);
-        ItemMeta vidroMeta = vidro.getItemMeta();
-        if (vidroMeta != null) {
-            vidroMeta.setDisplayName(color("&8"));
-            vidro.setItemMeta(vidroMeta);
-        }
-
-        // Moldura discreta nas duas linhas externas.
-        for (int slot : new int[]{
-                0, 1, 2, 3, 4, 5, 6, 7, 8,
-                18, 19, 20, 21, 22, 23, 24, 25, 26
-        }) {
-            inventory.setItem(slot, vidro.clone());
-        }
 
         // Os mundos ficam no centro da segunda linha:
         // 10 | 12 | 14 | 16
