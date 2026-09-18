@@ -245,8 +245,9 @@ public final class RtpManager implements Listener {
             x = centerX + randomBetween(-maxRadius, maxRadius);
             z = centerZ + randomBetween(-maxRadius, maxRadius);
             if (Math.abs(x - centerX) < minRadius && Math.abs(z - centerZ) < minRadius) {
-                findCandidate(player, world, settings, attempts, attempt + 1, minRadius, maxRadius,
-                        useBorder, centerX, centerZ, shape, minY, maxY, callback);
+                Bukkit.getScheduler().runTaskLater(plugin, () -> findCandidate(player, world, settings, attempts, attempt + 1,
+                        minRadius, maxRadius, useBorder, centerX, centerZ, shape, minY, maxY, callback), 1L);
+                return;
                 return;
             }
         } else {
@@ -286,8 +287,9 @@ public final class RtpManager implements Listener {
                 }
 
                 if (!generated) {
-                    findCandidate(player, world, settings, attempts, nextAttempt, minRadius, maxRadius,
-                            useBorder, centerX, centerZ, shape, minY, maxY, callback);
+                    Bukkit.getScheduler().runTaskLater(plugin, () -> findCandidate(player, world, settings, attempts, nextAttempt,
+                            minRadius, maxRadius, useBorder, centerX, centerZ, shape, minY, maxY, callback), 1L);
+                    return;
                     return;
                 }
 
@@ -400,92 +402,43 @@ public final class RtpManager implements Listener {
 
         int start = ThreadLocalRandom.current().nextInt(256);
 
-        // Uma única chunk já possui 256 colunas. Em vez de testar apenas a
-        // coluna sorteada, percorremos as colunas em ordem pseudo-aleatória.
-        // O destino continua partindo de uma chunk aleatória da WorldBorder,
-        // mas aproveitamos toda a área gerada para encontrar uma superfície.
-        for (int offset = 0; offset < 256; offset++) {
+        // O snapshot já informa o maior bloco não-ar de cada coluna.
+        // Limitamos a análise a 64 colunas para não fazer uma varredura pesada
+        // no thread principal. Como o candidato precisa ser o maior bloco não-ar
+        // e os dois blocos acima precisam ser ar, teto de caverna não passa.
+        for (int offset = 0; offset < 64; offset++) {
             int index = (start + offset) & 255;
             int localX = index & 15;
             int localZ = index >> 4;
 
             int highest = snapshot.getHighestBlockYAt(localX, localZ);
-            if (highest < minY || highest > maxY) continue;
+            if (highest < minY || highest >= maxY) continue;
 
-            Location safe = findSafeSurface(snapshot, world,
-                    chunkX * 16 + localX, chunkZ * 16 + localZ,
-                    localX, localZ, minY, maxY);
-
-            if (safe != null) return safe;
-        }
-
-        return null;
-    }
-
-    private Location findSafeSurface(org.bukkit.ChunkSnapshot snapshot, World world, int blockX, int blockZ,
-                                      int localX, int localZ, int minY, int maxY) {
-        int top = Math.min(maxY, snapshot.getHighestBlockYAt(localX, localZ));
-
-        if (world.getEnvironment() == World.Environment.NETHER) {
-            return findNetherSurface(snapshot, world, blockX, blockZ, localX, localZ, minY, top, maxY);
-        }
-
-        for (int y = top + 1; y >= minY + 1; y--) {
-            Material floor = snapshot.getBlockType(localX, y - 1, localZ);
-            Material feet = snapshot.getBlockType(localX, y, localZ);
-            Material head = snapshot.getBlockType(localX, y + 1, localZ);
+            Material floor = snapshot.getBlockType(localX, highest, localZ);
+            Material feet = snapshot.getBlockType(localX, highest + 1, localZ);
+            Material head = snapshot.getBlockType(localX, highest + 2, localZ);
 
             if (!isValidSurface(world.getEnvironment(), floor)) continue;
-            if (!isAirLike(feet) || !isAirLike(head)) continue;
             if (!isSafeMaterials(floor, feet, head)) continue;
 
-            // A superfície precisa estar realmente do lado de fora. Assim uma
-            // coordenada no fundo de uma caverna não passa apenas por ser o
-            // bloco mais alto daquela coluna.
-            if (!hasOpenSky(snapshot, localX, localZ, y, world.getMaxHeight())) continue;
+            if (world.getEnvironment() == World.Environment.NETHER) {
+                boolean open = true;
+                for (int y = highest + 1; y <= highest + 8 && y < maxY; y++) {
+                    if (!isAirLike(snapshot.getBlockType(localX, y, localZ))) {
+                        open = false;
+                        break;
+                    }
+                }
+                if (!open) continue;
+            }
 
-            return new Location(world, blockX + 0.5D, y, blockZ + 0.5D);
+            return new Location(world,
+                    chunkX * 16 + localX + 0.5D,
+                    highest + 1.0D,
+                    chunkZ * 16 + localZ + 0.5D);
         }
 
         return null;
-    }
-
-    private Location findNetherSurface(org.bukkit.ChunkSnapshot snapshot, World world, int blockX, int blockZ,
-                                       int localX, int localZ, int minY, int top, int maxY) {
-        for (int y = top + 1; y >= minY + 1; y--) {
-            Material floor = snapshot.getBlockType(localX, y - 1, localZ);
-            Material feet = snapshot.getBlockType(localX, y, localZ);
-            Material head = snapshot.getBlockType(localX, y + 1, localZ);
-
-            if (!isValidSurface(World.Environment.NETHER, floor)) continue;
-            if (!isAirLike(feet) || !isAirLike(head)) continue;
-            if (!isSafeMaterials(floor, feet, head)) continue;
-
-            // No Nether não existe céu aberto como no Overworld. Exigimos,
-            // porém, espaço vertical suficiente para não nascer dentro de
-            // um túnel/caverna apertado.
-            int open = 0;
-            for (int checkY = y + 2; checkY <= Math.min(maxY, snapshot.getHighestBlockYAt(localX, localZ) + 16); checkY++) {
-                if (!isAirLike(snapshot.getBlockType(localX, checkY, localZ))) break;
-                open++;
-                if (open >= 8) break;
-            }
-            if (open < 8) continue;
-
-            return new Location(world, blockX + 0.5D, y, blockZ + 0.5D);
-        }
-
-        return null;
-    }
-
-    private boolean hasOpenSky(org.bukkit.ChunkSnapshot snapshot, int localX, int localZ, int y, int maxHeight) {
-        int scanMax = Math.min(maxHeight - 1, 384);
-        for (int checkY = y + 2; checkY <= scanMax; checkY++) {
-            if (!isAirLike(snapshot.getBlockType(localX, checkY, localZ))) {
-                return false;
-            }
-        }
-        return true;
     }
 
     private boolean isValidSurface(World.Environment environment, Material material) {
