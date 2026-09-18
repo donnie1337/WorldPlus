@@ -7,6 +7,7 @@ import org.bukkit.GameRule;
 import org.bukkit.World;
 import org.bukkit.WorldCreator;
 import org.bukkit.WorldBorder;
+import org.bukkit.boss.DragonBattle;
 import org.bukkit.entity.EnderDragon;
 import org.bukkit.entity.EntityType;
 import org.bukkit.command.PluginCommand;
@@ -130,14 +131,17 @@ public final class WorldPlus extends JavaPlugin {
             applySettings(existing, settings);
             return existing;
         }
+        File worldFolder = new File(Bukkit.getWorldContainer(), settings.name());
+        boolean newWorld = !worldFolder.exists();
+
         WorldCreator creator = new WorldCreator(settings.name())
                 .environment(settings.environment())
                 .seed(settings.seed())
-                .generateStructures(settings.environment() == World.Environment.THE_END ? false : settings.structures());
+                .generateStructures(settings.structures());
         World world = creator.createWorld();
         if (world != null) {
             applySettings(world, settings);
-            if (world.getEnvironment() == World.Environment.THE_END) {
+            if (world.getEnvironment() == World.Environment.THE_END && newWorld) {
                 configureEnd(world, settings);
             }
             if (getConfig().getBoolean("configuracao.mensagem-console", true))
@@ -152,9 +156,14 @@ public final class WorldPlus extends JavaPlugin {
         }
 
         if (settings.removeEndDragon()) {
-            if (world.getEnderDragonBattle() != null) {
-                world.getEnderDragonBattle().setPreviouslyKilled(true);
+            DragonBattle battle = world.getEnderDragonBattle();
+            if (battle != null) {
+                battle.setPreviouslyKilled(true);
+                if (battle.getEnderDragon() != null) {
+                    battle.getEnderDragon().remove();
+                }
             }
+
             for (var entity : world.getEntities()) {
                 if (entity instanceof EnderDragon || entity.getType() == EntityType.END_CRYSTAL) {
                     entity.remove();
@@ -163,12 +172,14 @@ public final class WorldPlus extends JavaPlugin {
         }
 
         if (settings.removeEndTowers() || settings.removeEndBedrock()) {
-            final int radius = 128;
+            // Executado apenas no End recém-criado. A limpeza fica restrita à arena central,
+            // preservando End Cities e as demais estruturas vanilla do End.
+            final int radius = 64;
             final int minY = Math.max(world.getMinHeight(), 0);
             final int maxY = Math.min(world.getMaxHeight() - 1, 128);
 
-            for (int chunkX = -8; chunkX <= 8; chunkX++) {
-                for (int chunkZ = -8; chunkZ <= 8; chunkZ++) {
+            for (int chunkX = -4; chunkX <= 4; chunkX++) {
+                for (int chunkZ = -4; chunkZ <= 4; chunkZ++) {
                     var chunk = world.getChunkAt(chunkX, chunkZ);
                     for (int x = chunk.getX() * 16; x < chunk.getX() * 16 + 16; x++) {
                         for (int z = chunk.getZ() * 16; z < chunk.getZ() * 16 + 16; z++) {
@@ -176,8 +187,10 @@ public final class WorldPlus extends JavaPlugin {
                             for (int y = minY; y <= maxY; y++) {
                                 var block = world.getBlockAt(x, y, z);
                                 Material material = block.getType();
-                                if ((settings.removeEndTowers() && material == Material.OBSIDIAN)
-                                        || (settings.removeEndBedrock() && material == Material.BEDROCK)) {
+
+                                if (settings.removeEndTowers() && material == Material.OBSIDIAN) {
+                                    block.setType(Material.AIR, false);
+                                } else if (settings.removeEndBedrock() && material == Material.BEDROCK) {
                                     block.setType(Material.AIR, false);
                                 }
                             }
