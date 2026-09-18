@@ -221,12 +221,18 @@ public final class RtpManager implements Listener {
                 int chunkX = location.getBlockX() >> 4;
                 int chunkZ = location.getBlockZ() >> 4;
 
-                // O destino já foi validado. Garantimos novamente que a única
-                // chunk do destino está carregada antes da transferência.
+                // A preparação assíncrona já deixou a chunk FULL. Não usamos
+                // loadChunk aqui: essa chamada pode gerar a chunk de forma
+                // síncrona e travar o thread principal.
                 if (!world.isChunkLoaded(chunkX, chunkZ)) {
-                    if (!world.loadChunk(chunkX, chunkZ, true)) {
-                        throw new IllegalStateException("A chunk de destino não pôde ser carregada.");
-                    }
+                    prepareChunkAsync(world, chunkX, chunkZ, ready -> {
+                        if (!ready) {
+                            retryTeleport(player, settings, location, world, attempt);
+                            return;
+                        }
+                        teleportAttempt(player, settings, location, world, attempt);
+                    });
+                    return;
                 }
 
                 boolean accepted = player.teleport(
@@ -363,29 +369,95 @@ public final class RtpManager implements Listener {
         int chunkX = blockX >> 4;
         int chunkZ = blockZ >> 4;
 
-        // Somente UMA chunk é carregada/verificada por tentativa.
-        // Não existe preload 3x3, ticket permanente ou varredura de outras chunks.
-        try {
-            if (!world.isChunkGenerated(chunkX, chunkZ)) {
-                // Esta é a única operação de geração do candidato. Ela é executada
-                // uma vez, e somente para a chunk escolhida aleatoriamente.
-                world.loadChunk(chunkX, chunkZ, true);
-            } else if (!world.isChunkLoaded(chunkX, chunkZ)) {
-                world.loadChunk(chunkX, chunkZ, false);
-            }
-
-            Location safe = analyzeChunkForSurface(world, chunkX, chunkZ, minY, maxY);
-            if (safe != null) {
-                callback.accept(safe);
+        // Nunca geramos uma chunk nova de forma síncrona. Em Spigot puro,
+        // loadChunk(..., true) pode executar a geração inteira no thread principal.
+        // Pedimos ao próprio sistema de chunks do Minecraft uma future FULL e
+        // continuamos somente quando a geração/carregamento terminar.
+        prepareChunkAsync(world, chunkX, chunkZ, ready -> {
+            if (!ready) {
+                retryCandidate(player, world, settings, attempts, attempt,
+                        centerX, centerZ, halfSize, minY, maxY, callback);
                 return;
             }
-        } catch (Throwable throwable) {
-            plugin.getLogger().warning("Falha ao preparar a única chunk do RTP em "
-                    + chunkX + "," + chunkZ + " no mundo " + world.getName()
-                    + ": " + throwable.getMessage());
+
+            try {
+                Location safe = analyzeChunkForSurface(world, chunkX, chunkZ, minY, maxY);
+                if (safe != null) {
+                    callback.accept(safe);
+                    return;
+                }
+            } catch (Throwable throwable) {
+                plugin.getLogger().warning("Falha ao analisar a única chunk do RTP em "
+                        + chunkX + "," + chunkZ + " no mundo " + world.getName()
+                        + ": " + throwable.getMessage());
+            }
+
+            retryCandidate(player, world, settings, attempts, attempt,
+                    centerX, centerZ, halfSize, minY, maxY, callback);
+        });
+    }
+
+    private void retryTeleport(Player player, WorldSettings settings, Location location, World world, int attempt) {
+        Bukkit.getScheduler().runTaskLater(plugin,
+                () -> teleportAttempt(player, settings, location, world, attempt + 1), 1L);
+    }
+
+    /**
+     * Prepara exatamente uma chunk usando o pipeline de chunks do Minecraft.
+     *
+     * Spigot API não expõe um getChunkAsync para plugins. Por isso usamos
+     * reflexão somente para o ServerChunkCache#getChunkFuture. O future faz
+     * a geração/carregamento pelo próprio sistema de chunks; o callback volta
+     * ao thread principal antes de tocar na API Bukkit.
+     */
+    private void prepareChunkAsync(World world, int chunkX, int chunkZ,
+                                   java.util.function.Consumer<Boolean> callback) {
+        if (world.isChunkLoaded(chunkX, chunkZ)) {
+            callback.accept(true);
+            return;
         }
 
-        retryCandidate(player, world, settings, attempts, attempt, centerX, centerZ, halfSize, minY, maxY, callback);
+        try {
+            Object craftWorld = world;
+            java.lang.reflect.Method getHandle = craftWorld.getClass().getMethod("getHandle");
+            Object serverLevel = getHandle.invoke(craftWorld);
+
+            java.lang.reflect.Method getChunkSource = serverLevel.getClass().getMethod("getChunkSource");
+            Object chunkSource = getChunkSource.invoke(serverLevel);
+
+            Class<?> chunkStatusClass;
+            try {
+                chunkStatusClass = Class.forName("net.minecraft.world.level.chunk.status.ChunkStatus");
+            } catch (ClassNotFoundException ignored) {
+                chunkStatusClass = Class.forName("net.minecraft.world.level.chunk.ChunkStatus");
+            }
+
+            Object fullStatus = chunkStatusClass.getField("FULL").get(null);
+            java.lang.reflect.Method getChunkFuture = chunkSource.getClass().getMethod(
+                    "getChunkFuture", int.class, int.class, chunkStatusClass, boolean.class);
+
+            Object futureObject = getChunkFuture.invoke(chunkSource, chunkX, chunkZ, fullStatus, true);
+            if (!(futureObject instanceof java.util.concurrent.CompletableFuture<?> future)) {
+                throw new IllegalStateException("O pipeline de chunks não retornou CompletableFuture.");
+            }
+
+            future.whenComplete((result, throwable) -> Bukkit.getScheduler().runTask(plugin, () -> {
+                if (throwable != null) {
+                    plugin.getLogger().warning("Falha assíncrona ao preparar chunk "
+                            + chunkX + "," + chunkZ + " em " + world.getName()
+                            + ": " + throwable.getMessage());
+                    callback.accept(false);
+                    return;
+                }
+
+                callback.accept(world.isChunkGenerated(chunkX, chunkZ));
+            }));
+        } catch (Throwable throwable) {
+            plugin.getLogger().warning("Não foi possível iniciar o carregamento assíncrono da chunk "
+                    + chunkX + "," + chunkZ + " em " + world.getName()
+                    + ": " + throwable.getMessage());
+            callback.accept(false);
+        }
     }
 
     private void retryCandidate(Player player, World world, WorldSettings settings, int attempts, int attempt,
