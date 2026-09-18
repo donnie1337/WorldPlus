@@ -61,10 +61,8 @@ public final class RtpManager implements Listener {
         }
 
         int delay = plugin.getConfig().getInt("rtp.geral.atraso-segundos", 5);
-        // O atraso é o único período de espera do RTP. Durante esses segundos,
-        // a coordenada já é sorteada e a única chunk do candidato é preparada.
-        // Quando o contador termina, o jogador não espera mais nada: se a chunk
-        // estiver pronta e a posição for segura, ele é teleportado imediatamente.
+        // O atraso é mantido como configurado. A busca do destino ocorre sob demanda
+        // e somente gera a chunk do candidato, sem pré-gerar o mundo inteiro.
         if (delay > 0 && !player.hasPermission("worldplus.rtp.bypass.delay")) {
             UUID uuid = player.getUniqueId();
             pendingWorlds.put(uuid, settings.id());
@@ -76,8 +74,7 @@ public final class RtpManager implements Listener {
                 plugin.getTitleManager().showRtpLoading(player, delay * 20);
             }
 
-            // A preparação começa imediatamente. O contador e a preparação
-            // acontecem em paralelo.
+            // A busca ocorre durante o processamento normal do RTP.
             enqueue(player, settings.id());
 
             Bukkit.getScheduler().runTaskLater(plugin, () -> {
@@ -86,9 +83,7 @@ public final class RtpManager implements Listener {
                 delays.remove(uuid);
                 delayExpired.put(uuid, true);
 
-                // Se a chunk/local já estiver pronto, teleporta agora.
-                // Se ainda estiver sendo preparado, o callback da preparação
-                // fará o teleporte assim que ficar pronto.
+                // Se o destino já estiver pronto, teleporta agora.
                 attemptPendingTeleport(player, settings);
             }, delay * 20L);
             return;
@@ -155,8 +150,7 @@ public final class RtpManager implements Listener {
             if (pendingWorlds.containsKey(uuid)) {
                 pendingLocations.put(uuid, safe);
 
-                // Se os 3 segundos já terminaram enquanto a chunk era preparada,
-                // não existe uma segunda espera: teleporta imediatamente.
+                // Se o destino ficou pronto durante o atraso, teleporta imediatamente.
                 if (Boolean.TRUE.equals(delayExpired.get(uuid))) {
                     attemptPendingTeleport(player, settings);
                 }
@@ -221,12 +215,8 @@ public final class RtpManager implements Listener {
                 int chunkX = location.getBlockX() >> 4;
                 int chunkZ = location.getBlockZ() >> 4;
 
-                // A preparação assíncrona já deixou a chunk FULL. Não usamos
-                // loadChunk aqui: essa chamada pode gerar a chunk de forma
-                // síncrona e travar o thread principal.
-                // A chunk usada pelo RTP já foi pré-gerada. Não forçamos
-                // geração/carregamento síncrono aqui: o próprio teleporte
-                // solicita a chunk já existente ao pipeline do servidor.
+                // A chunk já foi gerada/carregada pelo fluxo de busca. Não
+                // chamamos loadChunk novamente para evitar uma segunda operação.
                 boolean accepted = player.teleport(
                         location,
                         org.bukkit.event.player.PlayerTeleportEvent.TeleportCause.PLUGIN
@@ -349,28 +339,8 @@ public final class RtpManager implements Listener {
         int minY = plugin.getConfig().getInt("rtp.mundos." + settings.id() + ".y-minimo", 0);
         int maxY = plugin.getConfig().getInt("rtp.mundos." + settings.id() + ".y-maximo", 320);
 
-        // O RTP nunca procura no mapa inteiro enquanto a pré-geração ainda
-        // está avançando. O limite de busca acompanha a área que já foi
-        // efetivamente gerada, mantendo o teleporte aleatório e evitando
-        // escolher 32 vezes chunks que ainda não existem.
-        int generatedRadius = plugin.getRtpPreGenerator() == null
-                ? 0
-                : plugin.getRtpPreGenerator().getGeneratedRadius(settings.id());
-
-        if (generatedRadius < minRadius) {
-            if (plugin.getRtpPreGenerator() != null
-                    && plugin.getRtpPreGenerator().isGenerating(settings.id())) {
-                Bukkit.getScheduler().runTaskLater(plugin,
-                        () -> findSafeLocationAsync(player, world, settings, attempts, callback), 5L);
-                return;
-            }
-            callback.accept(null);
-            return;
-        }
-
-        int availableMaxRadius = Math.min(maxRadius, generatedRadius);
         findCandidate(player, world, settings, attempts, 0, centerX, centerZ,
-                minRadius, availableMaxRadius, minY, maxY, callback);
+                minRadius, maxRadius, minY, maxY, callback);
     }
 
     private void findCandidate(Player player, World world, WorldSettings settings, int attempts, int attempt,
@@ -413,12 +383,26 @@ public final class RtpManager implements Listener {
             return;
         }
 
+        // Assim como os RTPs tradicionais, o WorldPlus gera/carrega somente
+        // a chunk do candidato atual. Não existe pré-geração do mundo.
         if (!world.isChunkGenerated(chunkX, chunkZ)) {
-            // Isso só pode ocorrer em uma borda ainda não alcançada pela
-            // pré-geração. Não geramos a chunk durante o RTP; reiniciamos
-            // a busca usando somente a área que já foi concluída.
-            Bukkit.getScheduler().runTaskLater(plugin,
-                    () -> findSafeLocationAsync(player, world, settings, attempts, callback), 2L);
+            prepareChunkAsync(world, chunkX, chunkZ, generated -> {
+                if (!generated) {
+                    retryCandidate(player, world, settings, attempts, attempt,
+                            centerX, centerZ, 0.0D, minY, maxY, callback);
+                    return;
+                }
+
+                Bukkit.getScheduler().runTask(plugin, () -> {
+                    Location safe = analyzeChunkForSurface(world, chunkX, chunkZ, minY, maxY);
+                    if (safe != null) {
+                        callback.accept(safe);
+                    } else {
+                        retryCandidate(player, world, settings, attempts, attempt,
+                                centerX, centerZ, 0.0D, minY, maxY, callback);
+                    }
+                });
+            });
             return;
         }
 
@@ -428,22 +412,17 @@ public final class RtpManager implements Listener {
             return;
         }
 
-        Bukkit.getScheduler().runTaskLater(plugin,
-                () -> findSafeLocationAsync(player, world, settings, attempts, callback), 1L);
-    }
-
-    private void retryTeleport(Player player, WorldSettings settings, Location location, World world, int attempt) {
-        Bukkit.getScheduler().runTaskLater(plugin,
-                () -> teleportAttempt(player, settings, location, world, attempt + 1), 1L);
+        retryCandidate(player, world, settings, attempts, attempt,
+                centerX, centerZ, 0.0D, minY, maxY, callback);
     }
 
     /**
-     * Prepara exatamente uma chunk usando o pipeline de chunks do Minecraft.
+     * Gera/carrega somente a chunk escolhida pelo RTP.
      *
-     * Spigot API não expõe um getChunkAsync para plugins. Por isso usamos
-     * reflexão somente para o ServerChunkCache#getChunkFuture. O future faz
-     * a geração/carregamento pelo próprio sistema de chunks; o callback volta
-     * ao thread principal antes de tocar na API Bukkit.
+     * O Spigot API não oferece geração assíncrona de chunk. Portanto esta
+     * operação é executada no thread principal, uma chunk por vez e somente
+     * quando um jogador solicita RTP. Isso substitui a antiga pré-geração
+     * contínua dos mundos.
      */
     private void prepareChunkAsync(World world, int chunkX, int chunkZ,
                                    java.util.function.Consumer<Boolean> callback) {
