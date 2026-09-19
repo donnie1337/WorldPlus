@@ -131,6 +131,11 @@ public final class RtpManager implements Listener {
                     return;
                 }
 
+                // O cooldown começa somente depois que o teleporte foi aceito.
+                // Assim, reabrir o /rtp continua permitido, mas qualquer novo
+                // clique em um mundo fica bloqueado pelos próximos 20 segundos.
+                long cooldown = cooldownSeconds(settings);
+                cooldowns.put(player.getUniqueId(), System.currentTimeMillis() + cooldown * 1000L);
                 completeTeleport(player, settings, location);
             });
         });
@@ -325,7 +330,6 @@ public final class RtpManager implements Listener {
             plugin.getTitleManager().showBiomeAfterRtp(player, location);
         }
 
-        cooldowns.put(uuid, System.currentTimeMillis() + cooldownSeconds(settings) * 1000L);
         heatmap.merge(location.getWorld().getName(), 1L, Long::sum);
     }
 
