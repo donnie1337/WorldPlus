@@ -249,6 +249,11 @@ public final class RtpManager implements Listener {
         }
     }
 
+    private void finishChunkLoad(ChunkRequest request) {
+        UUID worldId = request.world().getUID();
+        activeLoadsByWorld.computeIfPresent(worldId, (id, count) -> count <= 1 ? null : count - 1);
+    }
+
     private void scheduleChunkCheck(ChunkRequest request) {
         Bukkit.getScheduler().runTaskLater(plugin, () -> {
             if (pendingChunks.get(request.key()) != request) return;
