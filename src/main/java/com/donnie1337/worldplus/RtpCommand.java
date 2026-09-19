@@ -33,68 +33,115 @@ public final class RtpCommand implements CommandExecutor, TabCompleter, Listener
     }
 
     public void openMenu(Player player) {
-        // GUI fixo de 3 linhas (27 slots), com os mundos centralizados
-        // e separados visualmente entre si.
-        Inventory inventory = Bukkit.createInventory(
-                null,
-                27,
-                color(plugin.getConfig().getString("rtp.gui.titulo", "&8&lRTP &8• &fEscolha o mundo"))
+        int size = plugin.getConfig().getInt("rtp.gui.tamanho", 27);
+        if (size < 9) size = 9;
+        if (size > 54) size = 54;
+        size = (size / 9) * 9;
+
+        String title = plugin.getConfig().getString(
+                "rtp.gui.titulo", "&8&lRTP &8• &fEscolha o mundo"
         );
+        Inventory inventory = Bukkit.createInventory(null, size, color(title));
 
-
-        // Os mundos ficam no centro da segunda linha:
-        // 10 | 12 | 14 | 16
-        int[] slots = {10, 12, 14, 16};
-        int slotIndex = 0;
+        String fillerMaterial = plugin.getConfig().getString("rtp.gui.preenchimento.material", "GRAY_STAINED_GLASS_PANE");
+        String fillerName = plugin.getConfig().getString("rtp.gui.preenchimento.nome", " ");
+        if (plugin.getConfig().getBoolean("rtp.gui.preenchimento.habilitado", true)) {
+            Material filler = material(fillerMaterial, Material.GRAY_STAINED_GLASS_PANE);
+            ItemStack fillerItem = new ItemStack(filler);
+            ItemMeta fillerMeta = fillerItem.getItemMeta();
+            if (fillerMeta != null) {
+                fillerMeta.setDisplayName(color(fillerName));
+                fillerItem.setItemMeta(fillerMeta);
+            }
+            for (int slot = 0; slot < size; slot++) {
+                inventory.setItem(slot, fillerItem.clone());
+            }
+        }
 
         for (WorldSettings settings : plugin.getWorlds().values()) {
-            if (slotIndex >= slots.length) break;
-            if (!plugin.getConfig().getBoolean("rtp.mundos." + settings.id() + ".habilitado", true)) {
+            String path = "rtp.gui.mundos." + settings.id();
+            if (!plugin.getConfig().getBoolean(
+                    "rtp.mundos." + settings.id() + ".habilitado", true)) {
                 continue;
             }
 
-            Material material = switch (settings.environment()) {
-                case NETHER -> Material.NETHERRACK;
-                case THE_END -> Material.END_STONE;
-                default -> Material.GRASS_BLOCK;
+            int slot = plugin.getConfig().getInt(path + ".slot", -1);
+            if (slot < 0 || slot >= size) {
+                continue;
+            }
+
+            String defaultMaterial = switch (settings.environment()) {
+                case NETHER -> "NETHERRACK";
+                case THE_END -> "END_STONE";
+                default -> "GRASS_BLOCK";
             };
+
+            Material material = material(
+                    plugin.getConfig().getString(path + ".material", defaultMaterial),
+                    Material.GRASS_BLOCK
+            );
 
             ItemStack item = new ItemStack(material);
             ItemMeta meta = item.getItemMeta();
+            if (meta == null) continue;
 
-            if (meta != null) {
-                String nome = switch (settings.environment()) {
-                    case NETHER -> "&c&lNether";
-                    case THE_END -> "&5&lThe End";
-                    default -> settings.id().equalsIgnoreCase("mineracao")
-                            ? "&e&lMineração"
-                            : "&a&lMundo Normal";
-                };
+            String defaultName = switch (settings.environment()) {
+                case NETHER -> "&c&lNether";
+                case THE_END -> "&5&lThe End";
+                default -> settings.id().equalsIgnoreCase("mineracao")
+                        ? "&e&lMineração"
+                        : "&a&lMundo Normal";
+            };
 
-                meta.setDisplayName(color(nome));
-                meta.getPersistentDataContainer().set(worldKey, PersistentDataType.STRING, settings.id());
-                String raio = format(
-                        plugin.getConfig().getDouble(
-                                "rtp.mundos." + settings.id() + ".raio-maximo",
-                                settings.size() / 2
-                        )
+            meta.setDisplayName(color(plugin.getConfig().getString(
+                    path + ".nome", defaultName
+            )));
+
+            meta.getPersistentDataContainer().set(
+                    worldKey, PersistentDataType.STRING, settings.id()
+            );
+
+            double raio = plugin.getConfig().getDouble(
+                    "rtp.mundos." + settings.id() + ".raio-maximo",
+                    settings.size() / 2
+            );
+
+            List<String> lore = plugin.getConfig().getStringList(path + ".lore");
+            if (lore.isEmpty()) {
+                lore = List.of(
+                        "&7&l• &fTeleportação aleatória",
+                        "&8",
+                        "&7Mundo: &f{mundo}",
+                        "&7Raio de exploração: &b{raio} blocos",
+                        "&8",
+                        "&a&lClique para teleportar"
                 );
-
-                meta.setLore(List.of(
-                        color("&7&l• &fTeleportação aleatória"),
-                        color("&8"),
-                        color("&7Mundo: &f" + displayWorldName(settings)),
-                        color("&7Raio de exploração: &b" + raio + " blocos"),
-                        color("&8"),
-                        color("&a&lClique para teleportar")
-                ));
-                item.setItemMeta(meta);
             }
 
-            inventory.setItem(slots[slotIndex++], item);
+            List<String> finalLore = lore.stream()
+                    .map(line -> line
+                            .replace("{mundo}", displayWorldName(settings))
+                            .replace("{id}", settings.id())
+                            .replace("{raio}", format(raio)))
+                    .map(this::color)
+                    .toList();
+
+            meta.setLore(finalLore);
+            item.setItemMeta(meta);
+            inventory.setItem(slot, item);
         }
 
         player.openInventory(inventory);
+    }
+
+    private Material material(String value, Material fallback) {
+        if (value == null || value.isBlank()) return fallback;
+        try {
+            return Material.valueOf(value.toUpperCase());
+        } catch (IllegalArgumentException exception) {
+            plugin.getLogger().warning("Material inválido no GUI do RTP: " + value);
+            return fallback;
+        }
     }
 
     @EventHandler
