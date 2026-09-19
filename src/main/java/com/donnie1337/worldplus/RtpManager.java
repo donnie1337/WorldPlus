@@ -204,7 +204,6 @@ public final class RtpManager implements Listener {
                 retry(player, world, settings, maxAttempts, attempt, callback);
             }
         });
-
     }
 
     private void inspectChunk(Player player, World world, WorldSettings settings,
