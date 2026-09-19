@@ -63,20 +63,29 @@ public final class RtpManager implements Listener {
             return;
         }
 
+        long remaining = cooldownRemaining(player);
+        if (remaining > 0L) {
+            message(player, "cooldown",
+                    "&cAguarde &f{tempo} segundos &cpara usar o teleporte novamente.",
+                    "tempo", Long.toString(remaining));
+            return;
+        }
+
         pendingWorlds.put(uuid, settings.id());
 
         if (plugin.getTitleManager() != null) {
             plugin.getTitleManager().showRtpLoading(player, 10);
         }
 
-        // Delay de RTP: 2 segundos.
-        delays.put(uuid, System.currentTimeMillis() + 2000L);
+        long delaySeconds = Math.max(0L, plugin.getConfig().getLong(
+                "rtp.geral.atraso-segundos", 3L));
+        delays.put(uuid, System.currentTimeMillis() + delaySeconds * 1000L);
 
         Bukkit.getScheduler().runTaskLater(plugin, () -> {
             if (!player.isOnline() || !pendingWorlds.containsKey(uuid)) return;
             delays.remove(uuid);
             findAndTeleport(player, settings);
-        }, 40L);
+        }, delaySeconds * 20L);
     }
 
     private void findAndTeleport(Player player, WorldSettings settings) {
@@ -380,6 +389,12 @@ public final class RtpManager implements Listener {
     }
 
     private void completeTeleport(Player player, WorldSettings settings, Location location) {
+        long cooldownSeconds = cooldownSeconds(settings);
+        if (cooldownSeconds > 0L) {
+            cooldowns.put(player.getUniqueId(),
+                    System.currentTimeMillis() + cooldownSeconds * 1000L);
+        }
+
         clear(player);
 
         if (plugin.getTitleManager() != null) {
@@ -458,7 +473,9 @@ public final class RtpManager implements Listener {
 
     private void message(Player player, String key, String fallback,
                           String placeholder, String value) {
-        String message = plugin.getConfig().getString("mensagens." + key, fallback);
+        String message = plugin.getConfig().getString(
+                "rtp.mensagens." + key,
+                plugin.getConfig().getString("mensagens." + key, fallback));
         if (placeholder != null) {
             message = message.replace("{" + placeholder + "}", value);
         }
