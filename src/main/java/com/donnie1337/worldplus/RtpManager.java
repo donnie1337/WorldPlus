@@ -193,15 +193,15 @@ public final class RtpManager implements Listener {
 
     private void processChunkQueue() {
         if (pendingChunks.isEmpty()) return;
+        ChunkRequest selected = null;
         for (ChunkRequest request : pendingChunks.values()) {
-            if (!request.player().isOnline()) {
-                pendingChunks.remove(request.key());
-                continue;
+            if (!request.player().isOnline()) continue;
+            if (!worldLoadActive(request.world())) {
+                selected = request;
+                break;
             }
-            if (worldLoadActive(request.world())) continue;
-            startChunkPreparation(request);
-            return;
         }
+        if (selected != null) startChunkPreparation(selected);
     }
 
     private boolean worldLoadActive(World world) {
