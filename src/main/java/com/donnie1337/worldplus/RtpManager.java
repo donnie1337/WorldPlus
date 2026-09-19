@@ -311,7 +311,7 @@ public final class RtpManager implements Listener {
         // para encontrar um destino seguro. Capturar esses dados no thread
         // principal aumenta o custo justamente no caminho crítico do RTP.
         // O snapshot básico é thread-safe e será analisado fora do servidor.
-        ChunkSnapshot snapshot = chunk.getChunkSnapshot(true, false, false);
+        ChunkSnapshot snapshot = chunk.getChunkSnapshot(false, false, false);
         int minHeight = request.world().getMinHeight();
         int maxHeight = request.world().getMaxHeight();
 
@@ -364,8 +364,8 @@ public final class RtpManager implements Listener {
                 y = findNetherSafeY(snapshot, localX, localZ, maxY, minY);
             } else {
                 // O cálculo da altura acontece no worker usando o snapshot.
-                // Assim, o thread principal só captura os blocos e não precisa
-                // calcular 256 alturas antes de liberar o tick.
+                // Assim, o thread principal só captura os blocos e não calcula
+                // height maps adicionais antes de liberar o tick.
                 y = findOverworldSafeY(snapshot, localX, localZ,
                         maxHeight - 3, minHeight);
             }
@@ -392,10 +392,10 @@ public final class RtpManager implements Listener {
     private int findOverworldSafeY(ChunkSnapshot snapshot, int localX, int localZ,
                                    int maxY, int minY) {
         // RTP do Overworld deve sair na superfície, nunca em uma caverna.
-        // Procuramos de cima para baixo pelo primeiro bloco de terreno exposto
-        // ao céu. Assim, uma camada de pedra dentro de uma caverna não pode ser
-        // escolhida como piso do teleporte.
-        int top = Math.min(maxY, snapshot.getHighestBlockYAt(localX, localZ));
+        // O snapshot não inclui height map para manter a captura no thread
+        // principal mais leve. A altura da coluna é descoberta aqui, no worker,
+        // varrendo de cima para baixo.
+        int top = Math.min(maxY, snapshot.getMaxHeight() - 1);
         for (int y = top; y >= minY; y--) {
             Material floor = snapshot.getBlockType(localX, y, localZ);
             if (floor == Material.BEDROCK || isLiquid(floor) || !floor.isSolid()) {
@@ -411,16 +411,6 @@ public final class RtpManager implements Listener {
 
             // A superfície precisa estar exposta ao céu. Se houver qualquer bloco
             // sólido acima do jogador, trata-se de interior/caverna e continuamos.
-            boolean exposed = true;
-            for (int above = y + 1; above <= top; above++) {
-                Material blockAbove = snapshot.getBlockType(localX, above, localZ);
-                if (!blockAbove.isAir()) {
-                    exposed = false;
-                    break;
-                }
-            }
-            if (!exposed) continue;
-
             return y;
         }
         return Integer.MIN_VALUE;
