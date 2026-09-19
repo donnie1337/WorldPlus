@@ -169,53 +169,42 @@ public final class RtpManager implements Listener {
         double centerZ = plugin.getConfig().getDouble(
                 path + ".centro-z", world.getWorldBorder().getCenter().getZ());
 
-        ThreadLocalRandom random = ThreadLocalRandom.current();
-        double minSquared = (double) minRadius * minRadius;
-        double maxSquared = (double) maxRadius * maxRadius;
-        double radius = Math.sqrt(random.nextDouble(minSquared, maxSquared));
-        double angle = random.nextDouble(0.0D, Math.PI * 2.0D);
-
-        int x = (int) Math.floor(centerX + Math.cos(angle) * radius);
-        int z = (int) Math.floor(centerZ + Math.sin(angle) * radius);
-        int chunkX = x >> 4;
-        int chunkZ = z >> 4;
-
-        Location probe = new Location(world, x + 0.5D, world.getMinHeight(), z + 0.5D);
-        if (!world.getWorldBorder().isInside(probe)) {
-            retry(player, world, settings, maxAttempts, attempt, callback);
-            return;
-        }
-
-        // Não acessamos o sistema NMS de futures diretamente. Esse acesso estava
-        // reentrando no DistanceManager do 26.2 e provocando o NPE em
-        // ReferenceOpenHashSet durante o tick do jogador.
-        //
-        // Primeiro usamos uma chunk já carregada. Se não estiver carregada,
-        // somente aceitamos uma chunk que já tenha sido gerada. Assim o RTP nunca
-        // dispara geração de terreno novo através de reflexão/NMS.
         try {
-            if (world.isChunkLoaded(chunkX, chunkZ)) {
-                inspectChunk(player, world, settings, maxAttempts, attempt, chunkX, chunkZ, callback);
-                return;
-            }
-
-            if (!world.isChunkGenerated(chunkX, chunkZ)) {
+            Chunk[] loadedChunks = world.getLoadedChunks();
+            if (loadedChunks.length == 0) {
                 retry(player, world, settings, maxAttempts, attempt, callback);
                 return;
             }
 
-            Chunk chunk = world.getChunkAt(chunkX, chunkZ, false);
-            inspectLoadedChunk(player, world, settings, maxAttempts, attempt, chunk, callback);
-        } catch (Throwable ignored) {
-            retry(player, world, settings, maxAttempts, attempt, callback);
-        }
-    }
+            ThreadLocalRandom random = ThreadLocalRandom.current();
+            int start = random.nextInt(loadedChunks.length);
 
-    private void inspectChunk(Player player, World world, WorldSettings settings,
-                              int maxAttempts, int attempt, int chunkX, int chunkZ,
-                              Consumer<Location> callback) {
-        Chunk chunk = world.getChunkAt(chunkX, chunkZ, false);
-        inspectLoadedChunk(player, world, settings, maxAttempts, attempt, chunk, callback);
+            // Só trabalhamos com chunks que já estão carregadas pelo servidor.
+            // Isso é proposital: getChunkAt()/loadChunk() entram no DistanceManager
+            // e podem reentrar no sistema de tickets do Spigot 26.x.
+            for (int offset = 0; offset < loadedChunks.length; offset++) {
+                Chunk chunk = loadedChunks[(start + offset) % loadedChunks.length];
+                int chunkX = chunk.getX();
+                int chunkZ = chunk.getZ();
+
+                double chunkCenterX = (chunkX << 4) + 8.0D;
+                double chunkCenterZ = (chunkZ << 4) + 8.0D;
+                double distanceSquared = Math.pow(chunkCenterX - centerX, 2.0D)
+                        + Math.pow(chunkCenterZ - centerZ, 2.0D);
+
+                if (distanceSquared < (double) minRadius * minRadius
+                        || distanceSquared > (double) maxRadius * maxRadius) {
+                    continue;
+                }
+
+                inspectLoadedChunk(player, world, settings, maxAttempts, attempt, chunk, callback);
+                return;
+            }
+        } catch (Throwable ignored) {
+            // O RTP nunca pode deixar uma exceção do sistema de chunks derrubar o jogador.
+        }
+
+        retry(player, world, settings, maxAttempts, attempt, callback);
     }
 
     private void inspectLoadedChunk(Player player, World world, WorldSettings settings,
