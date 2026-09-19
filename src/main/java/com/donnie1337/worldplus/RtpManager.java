@@ -304,7 +304,15 @@ public final class RtpManager implements Listener {
                             return;
                         }
 
-                        Chunk chunk = world.getChunkAt(chunkX, chunkZ, false);
+                        Chunk chunk = extractBukkitChunk(result);
+                        if (chunk == null) {
+                            // O future já confirmou a carga, mas não conseguimos obter
+                            // o wrapper Bukkit sem pedir uma segunda vez ao DistanceManager.
+                            // Nesse caminho é mais seguro tentar outra chunk.
+                            retry(player, world, settings, maxAttempts, attempt, callback);
+                            return;
+                        }
+
                         inspectLoadedChunk(player, world, settings, maxAttempts, attempt, chunk, callback);
                     } catch (Throwable ignored) {
                         retry(player, world, settings, maxAttempts, attempt, callback);
@@ -317,6 +325,49 @@ public final class RtpManager implements Listener {
             finishChunkLoadSlot();
             Bukkit.getScheduler().runTask(plugin,
                     () -> retry(player, world, settings, maxAttempts, attempt, callback));
+        }
+    }
+
+    private Chunk extractBukkitChunk(Object result) {
+        Object current = result;
+
+        try {
+            if (current instanceof Chunk chunk) {
+                return chunk;
+            }
+
+            if (current instanceof java.util.Optional<?> optional) {
+                current = optional.orElse(null);
+                if (current == null) return null;
+            }
+
+            Method getBukkitChunk = current.getClass().getMethod("getBukkitChunk");
+            Object bukkitChunk = getBukkitChunk.invoke(current);
+            if (bukkitChunk instanceof Chunk chunk) {
+                return chunk;
+            }
+        } catch (Throwable ignored) {
+            // O resultado interno do future pode variar entre versões.
+        }
+
+        try {
+            Method left = current.getClass().getMethod("left");
+            Object leftValue = left.invoke(current);
+            if (leftValue instanceof java.util.Optional<?> optional) {
+                leftValue = optional.orElse(null);
+            }
+
+            if (leftValue == null) return null;
+
+            if (leftValue instanceof Chunk chunk) {
+                return chunk;
+            }
+
+            Method getBukkitChunk = leftValue.getClass().getMethod("getBukkitChunk");
+            Object bukkitChunk = getBukkitChunk.invoke(leftValue);
+            return bukkitChunk instanceof Chunk chunk ? chunk : null;
+        } catch (Throwable ignored) {
+            return null;
         }
     }
 
