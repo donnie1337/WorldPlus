@@ -87,6 +87,15 @@ rtp:
       - cave_air
       - void_air
 
+  # Proteções para impedir que uma sequência de RTP force várias cargas pesadas
+  # de chunks em ticks consecutivos. As cargas continuam sendo feitas pelo
+  # thread principal porque a API oficial do Spigot exige acesso Bukkit no
+  # thread principal.
+  desempenho:
+    intervalo-minimo-entre-cargas-ms: 250
+    limiar-carga-pesada-ms: 100
+    pausa-apos-carga-pesada-ms: 1500
+
   mensagens:
     rtp-em-andamento: "&cAguarde para se teleportar novamente."
     cooldown: "&cAguarde &f{tempo} segundos &cpara usar o teleporte novamente."
