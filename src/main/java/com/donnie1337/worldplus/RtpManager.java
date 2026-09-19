@@ -205,6 +205,8 @@ public final class RtpManager implements Listener {
             }
         });
 
+    }
+
     private void inspectChunk(Player player, World world, WorldSettings settings,
                               int maxAttempts, int attempt, int chunkX, int chunkZ,
                               Consumer<Location> callback) {
