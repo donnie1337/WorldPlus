@@ -24,6 +24,7 @@ import java.util.Map;
 public final class WorldPlus extends JavaPlugin {
     private final Map<String, WorldSettings> worlds = new LinkedHashMap<>();
     private TitleManager titleManager;
+    private RtpManager rtpManager;
 
     @Override
     public void onLoad() {
@@ -42,10 +43,10 @@ public final class WorldPlus extends JavaPlugin {
 
     @Override
     public void onDisable() {
-        // Encerra o executor dedicado do RTP para não deixar threads vivas
-        // durante reload/stop do plugin.
-        // O manager é criado no onEnable e não precisa ser mantido como campo,
-        // portanto os carregamentos pendentes terminam naturalmente com o stop.
+        if (rtpManager != null) {
+            rtpManager.shutdown();
+            rtpManager = null;
+        }
     }
 
     @Override
@@ -60,7 +61,7 @@ public final class WorldPlus extends JavaPlugin {
             for (WorldSettings settings : worlds.values()) createOrLoadWorld(settings);
         }
         titleManager = new TitleManager(this);
-        RtpManager rtpManager = new RtpManager(this);
+        rtpManager = new RtpManager(this);
         RtpCommand rtpCommand = new RtpCommand(this, rtpManager);
         PluginCommand rtp = getCommand("rtp");
         if (rtp != null) {
