@@ -13,12 +13,12 @@ import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.player.PlayerMoveEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
-import org.bukkit.event.world.ChunkLoadEvent;
 
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.CompletionStage;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.function.Consumer;
 
@@ -244,43 +244,95 @@ public final class RtpManager implements Listener {
 
         activeLoadsByWorld.merge(world.getUID(), 1, Integer::sum);
         pendingChunks.put(request.key(), request);
+
+        // IMPORTANTE: não usamos addPluginChunkTicket/loadChunk para iniciar o
+        // carregamento. A API Bukkit/Spigot faz essas operações de forma
+        // bloqueante quando a chunk ainda não está carregada. No 26.x o próprio
+        // ServerChunkCache possui getChunkFuture(...), que arma o pipeline de
+        // chunks e devolve um CompletableFuture sem bloquear o tick.
+        requestChunkFuture(request);
+    }
+
+    private void requestChunkFuture(ChunkRequest request) {
         try {
-            world.addPluginChunkTicket(chunkX, chunkZ, plugin);
+            Object handle = worldHandle(request.world());
+            Object chunkSource = handle.getClass().getMethod("getChunkSource").invoke(handle);
+            Class<?> statusClass = findChunkStatusClass();
+            Object fullStatus = statusClass.getField("FULL").get(null);
+
+            Object futureObject = chunkSource.getClass()
+                    .getMethod("getChunkFuture", int.class, int.class, statusClass, boolean.class)
+                    .invoke(chunkSource, request.key().x(), request.key().z(), fullStatus, true);
+
+            if (!(futureObject instanceof CompletionStage<?> stage)) {
+                throw new IllegalStateException("ServerChunkCache#getChunkFuture não retornou CompletionStage");
+            }
+
+            // O 26.x pode completar o future inline dentro do DistanceManager.
+            // A continuação do RTP precisa obrigatoriamente sair dessa thread
+            // antes de tocar novamente no sistema de chunks.
+            stage.whenCompleteAsync((ignored, error) -> {
+                Bukkit.getScheduler().runTask(plugin, () -> {
+                    if (error != null || !request.player().isOnline()) {
+                        finishChunkLoad(request);
+                        pendingChunks.remove(request.key());
+                        if (!request.player().isOnline()) {
+                            return;
+                        }
+                        retry(request.player(), request.world(), request.settings(),
+                                request.maxAttempts(), request.attempt(), request.callback());
+                        processChunkQueue();
+                        return;
+                    }
+
+                    if (!request.world().isChunkLoaded(request.key().x(), request.key().z())) {
+                        finishChunkLoad(request);
+                        pendingChunks.remove(request.key());
+                        retry(request.player(), request.world(), request.settings(),
+                                request.maxAttempts(), request.attempt(), request.callback());
+                        processChunkQueue();
+                        return;
+                    }
+
+                    Chunk chunk = request.world().getChunkAt(request.key().x(), request.key().z());
+
+                    // O future já deixou a chunk em FULL. Agora o ticket Bukkit
+                    // apenas retém a chunk durante a análise e o teleport; não
+                    // dispara a carga novamente.
+                    try {
+                        request.world().addPluginChunkTicket(request.key().x(), request.key().z(), plugin);
+                    } catch (Throwable ignoredTicket) {
+                        // A chunk já está carregada; se o ticket falhar, ainda
+                        // conseguimos concluir o RTP neste mesmo tick.
+                    }
+
+                    if (pendingChunks.remove(request.key()) == null) return;
+                    finishChunkLoad(request);
+                    inspectLoadedChunk(request.player(), request.world(), request.settings(),
+                            request.maxAttempts(), request.attempt(), chunk, request.callback(),
+                            request.key().x(), request.key().z());
+                    processChunkQueue();
+                });
+            }, command -> Bukkit.getScheduler().runTaskAsynchronously(plugin, command));
         } catch (Throwable ignored) {
             finishChunkLoad(request);
             pendingChunks.remove(request.key());
-            retry(request.player(), world, request.settings(), request.maxAttempts(), request.attempt(),
-                    request.callback());
-            return;
-        }
-
-        // Se o carregamento foi concluído imediatamente, o ChunkLoadEvent pode
-        // já ter acontecido. Fazemos uma checagem no próximo tick.
-        if (world.isChunkLoaded(chunkX, chunkZ)) {
-            Bukkit.getScheduler().runTask(plugin, () -> onExpectedChunkLoaded(request.key()));
+            retry(request.player(), request.world(), request.settings(),
+                    request.maxAttempts(), request.attempt(), request.callback());
+            processChunkQueue();
         }
     }
 
-    private void onExpectedChunkLoaded(ChunkKey key) {
-        ChunkRequest request = pendingChunks.get(key);
-        if (request == null || !request.world().isChunkLoaded(key.x(), key.z())) return;
-        Chunk chunk = request.world().getChunkAt(key.x(), key.z());
-        handleLoadedChunk(request, chunk);
+    private Object worldHandle(World world) throws ReflectiveOperationException {
+        return world.getClass().getMethod("getHandle").invoke(world);
     }
 
-    @EventHandler(priority = EventPriority.MONITOR)
-    public void onChunkLoad(ChunkLoadEvent event) {
-        Chunk chunk = event.getChunk();
-        ChunkRequest request = pendingChunks.get(new ChunkKey(event.getWorld().getUID(), chunk.getX(), chunk.getZ()));
-        if (request != null) handleLoadedChunk(request, chunk);
-    }
-
-    private void handleLoadedChunk(ChunkRequest request, Chunk chunk) {
-        if (pendingChunks.remove(request.key()) == null) return;
-        finishChunkLoad(request);
-        inspectLoadedChunk(request.player(), request.world(), request.settings(), request.maxAttempts(),
-                request.attempt(), chunk, request.callback(), request.key().x(), request.key().z());
-        processChunkQueue();
+    private Class<?> findChunkStatusClass() throws ClassNotFoundException {
+        try {
+            return Class.forName("net.minecraft.world.level.chunk.status.ChunkStatus");
+        } catch (ClassNotFoundException ignored) {
+            return Class.forName("net.minecraft.world.level.chunk.ChunkStatus");
+        }
     }
 
     private void finishChunkLoad(ChunkRequest request) {
