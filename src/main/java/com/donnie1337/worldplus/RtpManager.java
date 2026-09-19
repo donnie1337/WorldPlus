@@ -181,10 +181,36 @@ public final class RtpManager implements Listener {
             return;
         }
 
-        // A API Spigot 26.2 não expõe getChunkAtAsync no contrato de World.
-        // Carrega somente a chunk escolhida para este RTP.
-        Chunk chunk = world.getChunkAt(chunkX, chunkZ, true);
-        inspectLoadedChunk(player, world, settings, maxAttempts, attempt, chunk, callback);
+        /*
+         * 26.2 precisa que a continuação do future de chunk não seja executada
+         * inline no thread do servidor durante DistanceManager.runAllUpdates().
+         *
+         * O future pode completar no próprio processamento de chunks. Se a
+         * continuação continuar inline e voltar a tocar no sistema de chunks,
+         * o DistanceManager pode ser modificado enquanto está sendo iterado.
+         * Isso é exatamente o cenário que provoca o NPE em
+         * ReferenceOpenHashSet$SetIterator.
+         *
+         * Usamos whenCompleteAsync para quebrar essa continuação e, só depois,
+         * voltamos ao thread principal para criar o snapshot. Continua sendo
+         * apenas UMA chunk por tentativa.
+         */
+        world.getChunkAtAsync(chunkX, chunkZ, true).whenCompleteAsync((chunk, throwable) -> {
+            if (throwable != null || chunk == null) {
+                Bukkit.getScheduler().runTask(plugin,
+                        () -> retry(player, world, settings, maxAttempts, attempt, callback));
+                return;
+            }
+
+            Bukkit.getScheduler().runTask(plugin, () -> {
+                if (!player.isOnline()) {
+                    callback.accept(null);
+                    return;
+                }
+
+                inspectLoadedChunk(player, world, settings, maxAttempts, attempt, chunk, callback);
+            });
+        }, java.util.concurrent.ForkJoinPool.commonPool());
     }
 
     private void inspectChunk(Player player, World world, WorldSettings settings,
