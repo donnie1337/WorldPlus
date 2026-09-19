@@ -67,7 +67,7 @@ rtp:
     # Tempo mínimo entre usos do /rtp.
     # Tempo mínimo entre usos do /rtp.
     cooldown-segundos: 5
-    # O atraso é a única espera do RTP; a coordenada/chunk é preparada durante esse período.
+    # Tempo de espera antes de iniciar a busca do destino.
     pre-carregar-segundos: 3
     max-tentativas: 32
     blocos-bloqueados:
@@ -86,6 +86,16 @@ rtp:
       - air
       - cave_air
       - void_air
+
+  mensagens:
+    rtp-em-andamento: "&cAguarde para se teleportar novamente."
+    cooldown: "&cAguarde &f{tempo} segundos &cpara usar o teleporte novamente."
+    mundo-nao-encontrado: "&cMundo de RTP não encontrado: &f{id}&c."
+    mundo-desativado: "&cO RTP está desativado neste mundo."
+    sem-permissao-rtp: "&cVocê não tem permissão para usar o RTP neste mundo."
+    erro: "&cNão foi possível carregar o mundo de RTP."
+    local-nao-encontrado: "&cNão foi possível encontrar um local seguro para o RTP."
+    atraso-cancelado: "&cRTP cancelado porque você se moveu."
 
   gui:
     habilitado: true
