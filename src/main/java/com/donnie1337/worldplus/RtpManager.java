@@ -237,7 +237,7 @@ public final class RtpManager implements Listener {
 
     private void finishChunkLoadSlot() {
         activeChunkLoads.decrementAndGet();
-        pumpChunkLoads();
+        Bukkit.getScheduler().runTask(plugin, this::pumpChunkLoads);
     }
 
     private void loadChunkAsync(Player player, World world, WorldSettings settings,
