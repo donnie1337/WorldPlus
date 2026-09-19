@@ -18,14 +18,8 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 import java.util.concurrent.ThreadLocalRandom;
-import java.util.concurrent.ConcurrentLinkedQueue;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
-import java.lang.reflect.Method;
 
 public final class RtpManager implements Listener {
     private final WorldPlus plugin;
@@ -33,13 +27,6 @@ public final class RtpManager implements Listener {
     private final Map<UUID, Long> delays = new HashMap<>();
     private final Map<UUID, String> pendingWorlds = new HashMap<>();
     private final Map<String, Long> heatmap = new HashMap<>();
-    private final ConcurrentLinkedQueue<Runnable> chunkLoadQueue = new ConcurrentLinkedQueue<>();
-    private final AtomicInteger activeChunkLoads = new AtomicInteger();
-    private final ExecutorService rtpExecutor = Executors.newFixedThreadPool(2, runnable -> {
-        Thread thread = new Thread(runnable, "WorldPlus-RTP");
-        thread.setDaemon(true);
-        return thread;
-    });
 
     public RtpManager(WorldPlus plugin) {
         this.plugin = plugin;
@@ -403,7 +390,7 @@ public final class RtpManager implements Listener {
     }
 
     public void shutdown() {
-        shutdownRtpExecutor();
+        // O RTP não mantém executores próprios.
     }
 
     private void message(Player player, String key, String fallback,
