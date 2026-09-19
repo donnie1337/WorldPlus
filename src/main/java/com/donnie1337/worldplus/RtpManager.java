@@ -202,10 +202,6 @@ public final class RtpManager implements Listener {
             if (selected != null) {
                 startChunkPreparation(selected);
             }
-
-            if (!pendingChunks.isEmpty()) {
-                processChunkQueue();
-            }
         });
     }
 
