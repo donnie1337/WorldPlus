@@ -229,17 +229,28 @@ public final class RtpManager implements Listener {
             }
         }
 
+        // Nunca gere uma chunk durante o /rtp. A geração síncrona é justamente
+        // o que provoca picos de vários segundos no Server Thread. O destino
+        // precisa estar previamente gerado; somente chunks existentes são
+        // carregadas pelo RTP.
+        if (!world.isChunkGenerated(chunkX, chunkZ)) {
+            retry(request.player(), world, request.settings(), request.maxAttempts(), request.attempt(),
+                    request.callback());
+            return;
+        }
+
         activeLoadsByWorld.merge(world.getUID(), 1, Integer::sum);
         pendingChunks.put(request.key(), request);
         try {
             world.addPluginChunkTicket(chunkX, chunkZ, plugin);
         } catch (Throwable ignored) {
             finishChunkLoad(request);
-            retry(request.player(), world, request.settings(), request.maxAttempts(), request.attempt(), request.callback());
+            retry(request.player(), world, request.settings(), request.maxAttempts(), request.attempt(),
+                    request.callback());
             return;
         }
         if (world.isChunkLoaded(chunkX, chunkZ)) {
-            // ChunkLoadEvent may already have fired; the event handler below handles the normal path.
+            // A chunk já foi gerada; o ticket apenas a mantém carregada para a análise.
             Bukkit.getScheduler().runTask(plugin, () -> onExpectedChunkLoaded(request.key()));
         }
     }
