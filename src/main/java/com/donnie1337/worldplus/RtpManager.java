@@ -129,6 +129,9 @@ public final class RtpManager implements Listener {
                     return;
                 }
 
+                // O destino já foi preparado, mas a troca de dimensão pode
+                // disparar carregamento do chunk pelo próprio teleport. Mantemos
+                // a chunk de destino presa pelo ticket até depois do teleport.
                 boolean teleported = player.teleport(
                         location,
                         org.bukkit.event.player.PlayerTeleportEvent.TeleportCause.PLUGIN
