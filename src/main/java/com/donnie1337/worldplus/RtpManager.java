@@ -129,21 +129,25 @@ public final class RtpManager implements Listener {
                     return;
                 }
 
-                // O destino já foi preparado, mas a troca de dimensão pode
-                // disparar carregamento do chunk pelo próprio teleport. Mantemos
-                // a chunk de destino presa pelo ticket até depois do teleport.
+                // O destino já foi preparado e permanece preso pelo ticket até
+                // o teleport terminar, evitando um segundo carregamento da chunk.
                 boolean teleported = player.teleport(
                         location,
                         org.bukkit.event.player.PlayerTeleportEvent.TeleportCause.PLUGIN
                 );
 
                 if (!teleported) {
+                    removeRtpTicket(location.getWorld(), location.getBlockX() >> 4, location.getBlockZ() >> 4);
                     cooldowns.remove(player.getUniqueId());
                     message(player, "local-nao-encontrado",
                             "&cNão foi possível concluir o teleporte para o local preparado.", null, null);
                     clear(player);
                     return;
                 }
+
+                // A chunk foi mantida carregada pelo ticket durante o teleport.
+                // Agora que o jogador já está nela, podemos liberar o ticket.
+                removeRtpTicket(location.getWorld(), location.getBlockX() >> 4, location.getBlockZ() >> 4);
 
                 // Renova o cooldown a partir do teleporte efetivamente concluído.
                 long cooldown = cooldownSeconds(settings);
@@ -189,6 +193,11 @@ public final class RtpManager implements Listener {
         }
 
         ChunkKey key = new ChunkKey(world.getUID(), chunkX, chunkZ);
+        if (pendingChunks.containsKey(key)) {
+            retry(player, world, settings, maxAttempts, attempt, callback);
+            return;
+        }
+
         ChunkRequest request = new ChunkRequest(player, world, settings, maxAttempts, attempt, callback, key);
         pendingChunks.put(key, request);
         processChunkQueue();
@@ -218,19 +227,11 @@ public final class RtpManager implements Listener {
         int chunkZ = request.key().z();
 
         if (world.isChunkLoaded(chunkX, chunkZ)) {
-            Chunk chunk = null;
-            for (Chunk loaded : world.getLoadedChunks()) {
-                if (loaded.getX() == chunkX && loaded.getZ() == chunkZ) {
-                    chunk = loaded;
-                    break;
-                }
-            }
-            if (chunk != null) {
-                inspectLoadedChunk(request.player(), world, request.settings(), request.maxAttempts(),
-                        request.attempt(), chunk, request.callback(), chunkX, chunkZ);
-                processChunkQueue();
-                return;
-            }
+            Chunk chunk = world.getChunkAt(chunkX, chunkZ);
+            inspectLoadedChunk(request.player(), world, request.settings(), request.maxAttempts(),
+                    request.attempt(), chunk, request.callback(), chunkX, chunkZ);
+            processChunkQueue();
+            return;
         }
 
         // Nunca gere uma chunk durante o /rtp. Somente chunks previamente
@@ -263,14 +264,8 @@ public final class RtpManager implements Listener {
     private void onExpectedChunkLoaded(ChunkKey key) {
         ChunkRequest request = pendingChunks.get(key);
         if (request == null || !request.world().isChunkLoaded(key.x(), key.z())) return;
-        Chunk chunk = null;
-        for (Chunk loaded : request.world().getLoadedChunks()) {
-            if (loaded.getX() == key.x() && loaded.getZ() == key.z()) {
-                chunk = loaded;
-                break;
-            }
-        }
-        if (chunk != null) handleLoadedChunk(request, chunk);
+        Chunk chunk = request.world().getChunkAt(key.x(), key.z());
+        handleLoadedChunk(request, chunk);
     }
 
     @EventHandler(priority = EventPriority.MONITOR)
@@ -310,12 +305,14 @@ public final class RtpManager implements Listener {
 
             Bukkit.getScheduler().runTask(plugin, () -> {
                 if (!player.isOnline()) {
+                    removeRtpTicket(world, ticketChunkX, ticketChunkZ);
                     callback.accept(null);
                     return;
                 }
 
                 if (safe != null) {
-                    removeRtpTicket(world, ticketChunkX, ticketChunkZ);
+                    // Keep the ticket alive through the actual teleport. Removing it
+                    // here could unload the destination before Player#teleport runs.
                     callback.accept(safe);
                     return;
                 }
