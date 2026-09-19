@@ -64,10 +64,18 @@ public final class RtpManager implements Listener {
 
         UUID uuid = player.getUniqueId();
         if (pendingWorlds.containsKey(uuid)) {
-            message(player, "em-processamento", "&bSeu RTP já está sendo processado.", null, null);
+            message(player, "cooldown",
+                    "&cAguarde &f{tempo} segundos &cpara usar o teleporte novamente.",
+                    "tempo", Long.toString(Math.max(1L, cooldownSeconds(settings))));
             return;
         }
 
+        // Reserva imediatamente a janela do RTP. Isso impede que cliques
+        // consecutivos iniciem múltiplas buscas antes do primeiro teleporte
+        // terminar. Em caso de sucesso, o prazo é renovado a partir do
+        // teleporte concluído; em caso de falha, a reserva é removida.
+        long reservation = Math.max(1L, cooldownSeconds(settings));
+        cooldowns.put(uuid, System.currentTimeMillis() + reservation * 1000L);
         pendingWorlds.put(uuid, settings.id());
 
         // O GUI já foi fechado pelo evento de clique. Agora o title aparece
@@ -125,15 +133,14 @@ public final class RtpManager implements Listener {
                 );
 
                 if (!teleported) {
+                    cooldowns.remove(player.getUniqueId());
                     message(player, "local-nao-encontrado",
                             "&cNão foi possível concluir o teleporte para o local preparado.", null, null);
                     clear(player);
                     return;
                 }
 
-                // O cooldown começa somente depois que o teleporte foi aceito.
-                // Assim, reabrir o /rtp continua permitido, mas qualquer novo
-                // clique em um mundo fica bloqueado pelos próximos 20 segundos.
+                // Renova o cooldown a partir do teleporte efetivamente concluído.
                 long cooldown = cooldownSeconds(settings);
                 cooldowns.put(player.getUniqueId(), System.currentTimeMillis() + cooldown * 1000L);
                 completeTeleport(player, settings, location);
