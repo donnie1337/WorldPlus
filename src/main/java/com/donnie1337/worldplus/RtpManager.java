@@ -395,7 +395,7 @@ public final class RtpManager implements Listener {
         // O snapshot não inclui height map para manter a captura no thread
         // principal mais leve. A altura da coluna é descoberta aqui, no worker,
         // varrendo de cima para baixo.
-        int top = Math.min(maxY, maxY);
+        int top = maxY;
         for (int y = top; y >= minY; y--) {
             Material floor = snapshot.getBlockType(localX, y, localZ);
             if (floor == Material.BEDROCK || isLiquid(floor) || !floor.isSolid()) {
