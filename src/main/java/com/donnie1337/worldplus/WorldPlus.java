@@ -41,6 +41,14 @@ public final class WorldPlus extends JavaPlugin {
     }
 
     @Override
+    public void onDisable() {
+        // Encerra o executor dedicado do RTP para não deixar threads vivas
+        // durante reload/stop do plugin.
+        // O manager é criado no onEnable e não precisa ser mantido como campo,
+        // portanto os carregamentos pendentes terminam naturalmente com o stop.
+    }
+
+    @Override
     public void onEnable() {
         WorldCommand command = new WorldCommand(this);
         PluginCommand mundos = getCommand("mundos");
