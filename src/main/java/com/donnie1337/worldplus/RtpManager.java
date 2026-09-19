@@ -79,13 +79,9 @@ public final class RtpManager implements Listener {
             plugin.getTitleManager().showRtpLoading(player, 10);
         }
 
-        delays.put(uuid, System.currentTimeMillis() + 500L);
-
-        Bukkit.getScheduler().runTaskLater(plugin, () -> {
-            if (!player.isOnline() || !pendingWorlds.containsKey(uuid)) return;
-            delays.remove(uuid);
-            findAndTeleport(player, settings);
-        }, 10L);
+        // Delay temporariamente desativado para teste de carga/massa.
+        delays.remove(uuid);
+        findAndTeleport(player, settings);
     }
 
     private void findAndTeleport(Player player, WorldSettings settings) {
