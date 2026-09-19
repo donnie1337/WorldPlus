@@ -65,14 +65,12 @@ public final class RtpManager implements Listener {
             return;
         }
 
-        if (!player.hasPermission("worldplus.rtp.bypass.cooldown")) {
-            long remaining = cooldownRemaining(player);
-            if (remaining > 0) {
-                message(player, "cooldown",
-                        "&cAguarde &f{tempo}s &cantes de usar o RTP novamente.",
-                        "tempo", Long.toString(remaining));
-                return;
-            }
+        long remaining = cooldownRemaining(player);
+        if (remaining > 0) {
+            message(player, "cooldown",
+                    "&cAguarde &f{tempo} segundos &cpara usar o teleporte novamente.",
+                    "tempo", Long.toString(remaining));
+            return;
         }
 
         UUID uuid = player.getUniqueId();
@@ -258,7 +256,12 @@ public final class RtpManager implements Listener {
         try {
             Object serverLevel = world.getClass().getMethod("getHandle").invoke(world);
             Object chunkSource = serverLevel.getClass().getMethod("getChunkSource").invoke(serverLevel);
-            Class<?> chunkStatusClass = Class.forName("net.minecraft.world.level.chunk.status.ChunkStatus");
+            Class<?> chunkStatusClass;
+            try {
+                chunkStatusClass = Class.forName("net.minecraft.world.level.chunk.status.ChunkStatus");
+            } catch (ClassNotFoundException ignored) {
+                chunkStatusClass = Class.forName("net.minecraft.world.level.chunk.ChunkStatus");
+            }
             Object fullStatus = chunkStatusClass.getField("FULL").get(null);
 
             Method getChunkFuture = null;
