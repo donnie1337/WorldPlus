@@ -216,6 +216,7 @@ public final class RtpManager implements Listener {
         World world = request.world();
         int chunkX = request.key().x();
         int chunkZ = request.key().z();
+
         if (world.isChunkLoaded(chunkX, chunkZ)) {
             Chunk chunk = null;
             for (Chunk loaded : world.getLoadedChunks()) {
@@ -232,10 +233,10 @@ public final class RtpManager implements Listener {
             }
         }
 
-        // Nunca gere uma chunk durante o /rtp. A geração síncrona é justamente
-        // o que provoca picos de vários segundos no Server Thread. O destino
-        // precisa estar previamente gerado; somente chunks existentes são
-        // carregadas pelo RTP.
+        // A geração nunca acontece durante o /rtp. Para chunks já geradas,
+        // o próprio servidor controla o carregamento assíncrono e chama o
+        // callback na Server Thread quando a chunk estiver pronta. Isso evita
+        // que um jogador bloqueie o tick enquanto outro está fazendo RTP.
         if (!world.isChunkGenerated(chunkX, chunkZ)) {
             retry(request.player(), world, request.settings(), request.maxAttempts(), request.attempt(),
                     request.callback());
@@ -244,17 +245,28 @@ public final class RtpManager implements Listener {
 
         activeLoadsByWorld.merge(world.getUID(), 1, Integer::sum);
         pendingChunks.put(request.key(), request);
+
         try {
-            world.addPluginChunkTicket(chunkX, chunkZ, plugin);
+            world.getChunkAtAsync(chunkX, chunkZ, false, chunk -> {
+                ChunkRequest current = pendingChunks.get(request.key());
+                if (current == null) return;
+
+                // O carregamento foi concluído pelo sistema de chunks. Agora
+                // adicionamos o ticket somente para impedir o unload enquanto
+                // o snapshot é analisado e o jogador é teleportado.
+                try {
+                    world.addPluginChunkTicket(chunkX, chunkZ, plugin);
+                } catch (Throwable ignored) {
+                }
+
+                handleLoadedChunk(current, chunk);
+            });
         } catch (Throwable ignored) {
-            finishChunkLoad(request);
+            if (pendingChunks.remove(request.key()) != null) {
+                finishChunkLoad(request);
+            }
             retry(request.player(), world, request.settings(), request.maxAttempts(), request.attempt(),
                     request.callback());
-            return;
-        }
-        if (world.isChunkLoaded(chunkX, chunkZ)) {
-            // A chunk já foi gerada; o ticket apenas a mantém carregada para a análise.
-            Bukkit.getScheduler().runTask(plugin, () -> onExpectedChunkLoaded(request.key()));
         }
     }
 
