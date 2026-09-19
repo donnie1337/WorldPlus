@@ -114,7 +114,7 @@ rtp:
       formato: "circle"
       y-minimo: 0
       y-maximo: 320
-      cooldown-segundos: 20
+      cooldown-segundos: 5
 
     nether:
       habilitado: true
@@ -126,7 +126,7 @@ rtp:
       formato: "circle"
       y-minimo: 32
       y-maximo: 120
-      cooldown-segundos: 20
+      cooldown-segundos: 5
 
     end:
       habilitado: true
@@ -138,7 +138,7 @@ rtp:
       formato: "circle"
       y-minimo: 0
       y-maximo: 320
-      cooldown-segundos: 20
+      cooldown-segundos: 5
 
 # ============================================================
 # Titles
