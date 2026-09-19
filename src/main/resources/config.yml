@@ -67,7 +67,7 @@ rtp:
     # Tempo mínimo entre usos do /rtp.
     # 15 segundos dão tempo para o servidor concluir o processamento
     # e a geração/carregamento das chunks antes de outro RTP.
-    cooldown-segundos: 15
+    cooldown-segundos: 20
     # O atraso é a única espera do RTP; a coordenada/chunk é preparada durante esse período.
     pre-carregar-segundos: 3
     max-tentativas: 32
@@ -103,7 +103,7 @@ rtp:
       formato: "circle"
       y-minimo: 0
       y-maximo: 320
-      cooldown-segundos: 15
+      cooldown-segundos: 20
 
     mineracao:
       habilitado: true
@@ -115,7 +115,7 @@ rtp:
       formato: "circle"
       y-minimo: 0
       y-maximo: 320
-      cooldown-segundos: 15
+      cooldown-segundos: 20
 
     nether:
       habilitado: true
@@ -127,7 +127,7 @@ rtp:
       formato: "circle"
       y-minimo: 32
       y-maximo: 120
-      cooldown-segundos: 15
+      cooldown-segundos: 20
 
     end:
       habilitado: true
@@ -139,7 +139,7 @@ rtp:
       formato: "circle"
       y-minimo: 0
       y-maximo: 320
-      cooldown-segundos: 15
+      cooldown-segundos: 20
 
 # ============================================================
 # Titles
@@ -298,6 +298,7 @@ titles:
 
 mensagens:
   prefixo: "&7&lᴡᴏʀʟᴅᴘʟᴜs &8• &r"
+  cooldown: "&cAguarde &f{tempo} segundos &cpara usar o teleporte novamente."
   sem-permissao: "&cVocê não tem permissão para executar este comando."
   uso: "&cUso: /mundos <lista|info|tp|borda|spawn|setspawn|criar|excluir|recarregar>"
   uso-borda: "&cUso: /mundos borda [mundo] [norte|sul|leste|oeste]"
