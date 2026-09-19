@@ -33,9 +33,90 @@ public final class RtpManager implements Listener {
     private boolean queuePumpScheduled;
     private long nextChunkLoadAllowedAtNanos;
     private long lastChunkLoadDurationMs;
+    private final Map<WorldKey, java.util.ArrayDeque<WarmChunk>> warmPools = new HashMap<>();
+    private final Map<ChunkKey, WarmChunk> warmingChunks = new HashMap<>();
+    private boolean warmupScheduled;
+    private static final int DEFAULT_WARM_POOL_SIZE = 4;
 
     public RtpManager(WorldPlus plugin) {
         this.plugin = plugin;
+    }
+
+    private int warmPoolSize(String worldId) {
+        return Math.max(0, plugin.getConfig().getInt("rtp.mundos." + worldId + ".pool-preparado", DEFAULT_WARM_POOL_SIZE));
+    }
+
+    private void scheduleWarmup() {
+        if (warmupScheduled) return;
+        warmupScheduled = true;
+        Bukkit.getScheduler().runTaskLater(plugin, () -> {
+            warmupScheduled = false;
+            warmOneChunk();
+        }, 20L);
+    }
+
+    private void warmOneChunk() {
+        WorldSettings settings = null;
+        for (WorldSettings candidate : plugin.getSettingsMap().values()) {
+            if (warmPoolSize(candidate.id()) <= 0) continue;
+            World world = Bukkit.getWorld(candidate.name());
+            if (world == null) continue;
+            WorldKey wk = new WorldKey(world.getUID(), candidate.id());
+            java.util.ArrayDeque<WarmChunk> pool = warmPools.computeIfAbsent(wk, k -> new java.util.ArrayDeque<>());
+            if (pool.size() < warmPoolSize(candidate.id())) { settings = candidate; break; }
+        }
+        if (settings == null) return;
+        World world = Bukkit.getWorld(settings.name());
+        if (world == null) return;
+        findWarmCandidate(settings, world, 0);
+    }
+
+    private void findWarmCandidate(WorldSettings settings, World world, int attempt) {
+        if (attempt >= 8) { scheduleWarmup(); return; }
+        ChunkKey key = randomChunkKey(settings, world);
+        if (key == null || warmingChunks.containsKey(key) || world.isChunkLoaded(key.x(), key.z())) {
+            findWarmCandidate(settings, world, attempt + 1); return;
+        }
+        WarmChunk warm = new WarmChunk(key, settings.id());
+        warmingChunks.put(key, warm);
+        try {
+            world.addPluginChunkTicket(key.x(), key.z(), plugin);
+            Bukkit.getScheduler().runTaskLater(plugin, () -> finishWarmup(warm, world, settings), 2L);
+        } catch (Throwable ignored) {
+            warmingChunks.remove(key); scheduleWarmup();
+        }
+    }
+
+    private void finishWarmup(WarmChunk warm, World world, WorldSettings settings) {
+        warmingChunks.remove(warm.key());
+        if (!world.isChunkLoaded(warm.key().x(), warm.key().z())) { scheduleWarmup(); return; }
+        Chunk chunk = world.getChunkAt(warm.key().x(), warm.key().z());
+        ChunkSnapshot snapshot = chunk.getChunkSnapshot(false, false, false);
+        Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
+            Location safe = findSafeColumn(world, snapshot, world.getMinHeight(), world.getMaxHeight());
+            Bukkit.getScheduler().runTask(plugin, () -> {
+                if (safe == null) { removeTicket(world, warm.key().x(), warm.key().z()); scheduleWarmup(); return; }
+                WorldKey wk = new WorldKey(world.getUID(), settings.id());
+                java.util.ArrayDeque<WarmChunk> pool = warmPools.computeIfAbsent(wk, k -> new java.util.ArrayDeque<>());
+                if (pool.size() >= warmPoolSize(settings.id())) { removeTicket(world, warm.key().x(), warm.key().z()); }
+                else { warm.setLocation(safe); pool.addLast(warm); }
+                scheduleWarmup();
+            });
+        });
+    }
+
+    private ChunkKey randomChunkKey(WorldSettings settings, World world) {
+        String path="rtp.mundos."+settings.id();
+        int minRadius=Math.max(0,plugin.getConfig().getInt(path+".raio-minimo",100));
+        int maxRadius=Math.max(minRadius+1,plugin.getConfig().getInt(path+".raio-maximo",(int)(world.getWorldBorder().getSize()/2.0D)));
+        double cx=plugin.getConfig().getDouble(path+".centro-x",world.getWorldBorder().getCenter().getX());
+        double cz=plugin.getConfig().getDouble(path+".centro-z",world.getWorldBorder().getCenter().getZ());
+        ThreadLocalRandom r=ThreadLocalRandom.current();
+        double radius=Math.sqrt(r.nextDouble((double)minRadius*minRadius,(double)maxRadius*maxRadius));
+        double angle=r.nextDouble(0.0D,Math.PI*2.0D);
+        int x=(int)Math.floor(cx+Math.cos(angle)*radius), z=(int)Math.floor(cz+Math.sin(angle)*radius);
+        if(!world.getWorldBorder().isInside(new Location(world,x+0.5D,world.getMinHeight(),z+0.5D))) return null;
+        return new ChunkKey(world.getUID(),x>>4,z>>4);
     }
 
     public void request(Player player, String worldId) {
@@ -74,6 +155,7 @@ public final class RtpManager implements Listener {
         }
 
         pendingWorlds.put(uuid, settings.id());
+        scheduleWarmup();
 
         if (plugin.getTitleManager() != null) {
             plugin.getTitleManager().showRtpLoading(player, 10);
@@ -150,6 +232,16 @@ public final class RtpManager implements Listener {
         if (!player.isOnline() || attempt >= maxAttempts) {
             callback.accept(null);
             return;
+        }
+
+        java.util.ArrayDeque<WarmChunk> pool = warmPools.get(new WorldKey(world.getUID(), settings.id()));
+        if (pool != null && !pool.isEmpty()) {
+            WarmChunk warm = pool.pollFirst();
+            if (warm != null && warm.location() != null) {
+                request.callback().accept(warm.location());
+                Bukkit.getScheduler().runTask(plugin, () -> { removeTicket(world, warm.key().x(), warm.key().z()); scheduleWarmup(); });
+                return;
+            }
         }
 
         String path = "rtp.mundos." + settings.id();
@@ -516,6 +608,9 @@ public final class RtpManager implements Listener {
 
     public void shutdown() {
         queuePumpScheduled = false;
+        warmupScheduled = false;
+        warmingChunks.clear();
+        warmPools.clear();
         pendingChunks.clear();
         activeLoadsByWorld.clear();
         for (World world : Bukkit.getWorlds()) {
@@ -539,4 +634,16 @@ public final class RtpManager implements Listener {
     private record ChunkRequest(Player player, World world, WorldSettings settings,
                                 int maxAttempts, int attempt, Consumer<Location> callback,
                                 ChunkKey key) {}
+
+    private record WorldKey(UUID worldId, String settingsId) {}
+
+    private static final class WarmChunk {
+        private final ChunkKey key;
+        private final String settingsId;
+        private Location location;
+        WarmChunk(ChunkKey key, String settingsId) { this.key=key; this.settingsId=settingsId; }
+        ChunkKey key(){ return key; }
+        Location location(){ return location; }
+        void setLocation(Location location){ this.location=location; }
+    }
 }
