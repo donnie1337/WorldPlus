@@ -58,9 +58,8 @@ public final class RtpManager implements Listener {
 
         UUID uuid = player.getUniqueId();
         if (pendingWorlds.containsKey(uuid)) {
-            message(player, "cooldown",
-                    "&cAguarde &f{tempo} segundos &cpara usar o teleporte novamente.",
-                    "tempo", Long.toString(Math.max(1L, cooldownSeconds(settings))));
+            message(player, "rtp-em-andamento",
+                    "&cAguarde para se teleportar novamente.", null, null);
             return;
         }
 
