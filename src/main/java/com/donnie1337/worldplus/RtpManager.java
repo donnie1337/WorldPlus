@@ -31,6 +31,8 @@ public final class RtpManager implements Listener {
     private final Map<UUID, Integer> activeLoadsByWorld = new HashMap<>();
     private static final int MAX_CONCURRENT_CHUNK_LOADS = 1;
     private boolean queuePumpScheduled;
+    private long nextChunkLoadAllowedAtNanos;
+    private long lastChunkLoadDurationMs;
 
     public RtpManager(WorldPlus plugin) {
         this.plugin = plugin;
@@ -188,6 +190,16 @@ public final class RtpManager implements Listener {
 
         queuePumpScheduled = true;
         Bukkit.getScheduler().runTask(plugin, () -> {
+            long waitNanos = nextChunkLoadAllowedAtNanos - System.nanoTime();
+            if (waitNanos > 0L) {
+                long waitTicks = Math.max(1L, (waitNanos + 49_999_999L) / 50_000_000L);
+                Bukkit.getScheduler().runTaskLater(plugin, () -> {
+                    queuePumpScheduled = false;
+                    processChunkQueue();
+                }, waitTicks);
+                return;
+            }
+
             queuePumpScheduled = false;
 
             ChunkRequest selected = null;
@@ -219,7 +231,6 @@ public final class RtpManager implements Listener {
         if (world.isChunkLoaded(chunkX, chunkZ)) {
             Chunk chunk = world.getChunkAt(chunkX, chunkZ);
             inspectLoadedChunk(request, chunk);
-            processChunkQueue();
             return;
         }
 
@@ -237,10 +248,23 @@ public final class RtpManager implements Listener {
         // DistanceManager. A API oficial de ticket é responsável pelo
         // carregamento e mantém a chunk viva até o teleport.
         try {
+            long loadStartedAt = System.nanoTime();
             if (!world.addPluginChunkTicket(chunkX, chunkZ, plugin)) {
                 scheduleChunkCheck(request);
                 return;
             }
+
+            lastChunkLoadDurationMs = Math.max(0L,
+                    (System.nanoTime() - loadStartedAt) / 1_000_000L);
+            long minIntervalMs = Math.max(0L, plugin.getConfig().getLong(
+                    "rtp.desempenho.intervalo-minimo-entre-cargas-ms", 250L));
+            long heavyThresholdMs = Math.max(1L, plugin.getConfig().getLong(
+                    "rtp.desempenho.limiar-carga-pesada-ms", 100L));
+            long heavyPauseMs = Math.max(0L, plugin.getConfig().getLong(
+                    "rtp.desempenho.pausa-apos-carga-pesada-ms", 1500L));
+            long pauseMs = Math.max(minIntervalMs,
+                    lastChunkLoadDurationMs >= heavyThresholdMs ? heavyPauseMs : 0L);
+            nextChunkLoadAllowedAtNanos = System.nanoTime() + pauseMs * 1_000_000L;
 
             scheduleChunkCheck(request);
         } catch (Throwable ignored) {
@@ -278,7 +302,6 @@ public final class RtpManager implements Listener {
             pendingChunks.remove(request.key());
             finishChunkLoad(request);
             inspectLoadedChunk(request, chunk);
-            processChunkQueue();
         }, 1L);
     }
 
@@ -292,17 +315,20 @@ public final class RtpManager implements Listener {
                 if (!request.player().isOnline()) {
                     removeTicket(request.world(), request.key().x(), request.key().z());
                     request.callback().accept(null);
+                    processChunkQueue();
                     return;
                 }
 
                 if (safe != null) {
                     request.callback().accept(safe);
+                    processChunkQueue();
                     return;
                 }
 
                 removeTicket(request.world(), request.key().x(), request.key().z());
                 retry(request.player(), request.world(), request.settings(),
                         request.maxAttempts(), request.attempt(), request.callback());
+                processChunkQueue();
             });
         });
     }
