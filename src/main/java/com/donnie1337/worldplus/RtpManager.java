@@ -13,6 +13,7 @@ import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.player.PlayerMoveEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
+import org.bukkit.event.world.ChunkLoadEvent;
 
 import java.util.Collections;
 import java.util.HashMap;
@@ -27,6 +28,9 @@ public final class RtpManager implements Listener {
     private final Map<UUID, Long> delays = new HashMap<>();
     private final Map<UUID, String> pendingWorlds = new HashMap<>();
     private final Map<String, Long> heatmap = new HashMap<>();
+    private final Map<ChunkKey, ChunkRequest> pendingChunks = new HashMap<>();
+    private final Map<UUID, Integer> activeLoadsByWorld = new HashMap<>();
+    private static final int MAX_CONCURRENT_CHUNK_LOADS = 1;
 
     public RtpManager(WorldPlus plugin) {
         this.plugin = plugin;
@@ -164,18 +168,12 @@ public final class RtpManager implements Listener {
         int maxRadius = Math.max(minRadius + 1,
                 plugin.getConfig().getInt(path + ".raio-maximo",
                         (int) (world.getWorldBorder().getSize() / 2.0D)));
-
-        double centerX = plugin.getConfig().getDouble(
-                path + ".centro-x", world.getWorldBorder().getCenter().getX());
-        double centerZ = plugin.getConfig().getDouble(
-                path + ".centro-z", world.getWorldBorder().getCenter().getZ());
+        double centerX = plugin.getConfig().getDouble(path + ".centro-x", world.getWorldBorder().getCenter().getX());
+        double centerZ = plugin.getConfig().getDouble(path + ".centro-z", world.getWorldBorder().getCenter().getZ());
 
         ThreadLocalRandom random = ThreadLocalRandom.current();
-        double minSquared = (double) minRadius * minRadius;
-        double maxSquared = (double) maxRadius * maxRadius;
-        double radius = Math.sqrt(random.nextDouble(minSquared, maxSquared));
+        double radius = Math.sqrt(random.nextDouble((double) minRadius * minRadius, (double) maxRadius * maxRadius));
         double angle = random.nextDouble(0.0D, Math.PI * 2.0D);
-
         int x = (int) Math.floor(centerX + Math.cos(angle) * radius);
         int z = (int) Math.floor(centerZ + Math.sin(angle) * radius);
         int chunkX = x >> 4;
@@ -187,56 +185,101 @@ public final class RtpManager implements Listener {
             return;
         }
 
-        try {
-            // O sorteio já aconteceu antes de qualquer consulta à chunk.
-            // Se ela estiver carregada ou não, o destino é exatamente o
-            // resultado sorteado. O ticket apenas garante que essa chunk
-            // específica seja preparada pelo sistema de chunks.
-            boolean ticketAdded = world.addPluginChunkTicket(chunkX, chunkZ, plugin);
-            if (!ticketAdded && !world.isChunkLoaded(chunkX, chunkZ)) {
-                retry(player, world, settings, maxAttempts, attempt, callback);
+        ChunkKey key = new ChunkKey(world.getUID(), chunkX, chunkZ);
+        ChunkRequest request = new ChunkRequest(player, world, settings, maxAttempts, attempt, callback, key);
+        pendingChunks.put(key, request);
+        processChunkQueue();
+    }
+
+    private void processChunkQueue() {
+        if (pendingChunks.isEmpty()) return;
+        for (ChunkRequest request : pendingChunks.values()) {
+            if (!request.player().isOnline()) {
+                pendingChunks.remove(request.key());
+                continue;
+            }
+            if (worldLoadActive(request.world())) continue;
+            startChunkPreparation(request);
+            return;
+        }
+    }
+
+    private boolean worldLoadActive(World world) {
+        return activeLoadsByWorld.getOrDefault(world.getUID(), 0) >= MAX_CONCURRENT_CHUNK_LOADS;
+    }
+
+    private void startChunkPreparation(ChunkRequest request) {
+        pendingChunks.remove(request.key());
+        World world = request.world();
+        int chunkX = request.key().x();
+        int chunkZ = request.key().z();
+        if (world.isChunkLoaded(chunkX, chunkZ)) {
+            Chunk chunk = null;
+            for (Chunk loaded : world.getLoadedChunks()) {
+                if (loaded.getX() == chunkX && loaded.getZ() == chunkZ) {
+                    chunk = loaded;
+                    break;
+                }
+            }
+            if (chunk != null) {
+                inspectLoadedChunk(request.player(), world, request.settings(), request.maxAttempts(),
+                        request.attempt(), chunk, request.callback(), chunkX, chunkZ);
+                processChunkQueue();
                 return;
             }
+        }
 
-            waitForRandomChunk(player, world, settings, maxAttempts, attempt,
-                    chunkX, chunkZ, callback, 0);
+        activeLoadsByWorld.merge(world.getUID(), 1, Integer::sum);
+        pendingChunks.put(request.key(), request);
+        try {
+            world.addPluginChunkTicket(chunkX, chunkZ, plugin);
         } catch (Throwable ignored) {
-            retry(player, world, settings, maxAttempts, attempt, callback);
-        }
-    }
-
-    private void waitForRandomChunk(Player player, World world, WorldSettings settings,
-                                    int maxAttempts, int attempt,
-                                    int chunkX, int chunkZ,
-                                    Consumer<Location> callback, int waitTicks) {
-        if (!player.isOnline()) {
-            removeRtpTicket(world, chunkX, chunkZ);
-            callback.accept(null);
+            finishChunkLoad(request);
+            retry(request.player(), world, request.settings(), request.maxAttempts(), request.attempt(), request.callback());
             return;
         }
-
         if (world.isChunkLoaded(chunkX, chunkZ)) {
-            try {
-                Chunk chunk = world.getChunkAt(chunkX, chunkZ, false);
-                inspectLoadedChunk(player, world, settings, maxAttempts, attempt,
-                        chunk, callback, chunkX, chunkZ);
-            } catch (Throwable ignored) {
-                removeRtpTicket(world, chunkX, chunkZ);
-                retry(player, world, settings, maxAttempts, attempt, callback);
-            }
-            return;
+            // ChunkLoadEvent may already have fired; the event handler below handles the normal path.
+            Bukkit.getScheduler().runTask(plugin, () -> onExpectedChunkLoaded(request.key()));
         }
-
-        if (waitTicks >= 100) {
-            removeRtpTicket(world, chunkX, chunkZ);
-            retry(player, world, settings, maxAttempts, attempt, callback);
-            return;
-        }
-
-        Bukkit.getScheduler().runTaskLater(plugin, () ->
-                waitForRandomChunk(player, world, settings, maxAttempts, attempt,
-                        chunkX, chunkZ, callback, waitTicks + 1), 1L);
     }
+
+    private void onExpectedChunkLoaded(ChunkKey key) {
+        ChunkRequest request = pendingChunks.get(key);
+        if (request == null || !request.world().isChunkLoaded(key.x(), key.z())) return;
+        Chunk chunk = null;
+        for (Chunk loaded : request.world().getLoadedChunks()) {
+            if (loaded.getX() == key.x() && loaded.getZ() == key.z()) {
+                chunk = loaded;
+                break;
+            }
+        }
+        if (chunk != null) handleLoadedChunk(request, chunk);
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR)
+    public void onChunkLoad(ChunkLoadEvent event) {
+        Chunk chunk = event.getChunk();
+        ChunkRequest request = pendingChunks.get(new ChunkKey(event.getWorld().getUID(), chunk.getX(), chunk.getZ()));
+        if (request != null) handleLoadedChunk(request, chunk);
+    }
+
+    private void handleLoadedChunk(ChunkRequest request, Chunk chunk) {
+        if (pendingChunks.remove(request.key()) == null) return;
+        finishChunkLoad(request);
+        inspectLoadedChunk(request.player(), request.world(), request.settings(), request.maxAttempts(),
+                request.attempt(), chunk, request.callback(), request.key().x(), request.key().z());
+        processChunkQueue();
+    }
+
+    private void finishChunkLoad(ChunkRequest request) {
+        UUID worldId = request.world().getUID();
+        activeLoadsByWorld.computeIfPresent(worldId, (id, count) -> count <= 1 ? null : count - 1);
+    }
+
+    private record ChunkKey(UUID worldId, int x, int z) {}
+    private record ChunkRequest(Player player, World world, WorldSettings settings, int maxAttempts,
+                                int attempt, Consumer<Location> callback, ChunkKey key) {}
 
     private void inspectLoadedChunk(Player player, World world, WorldSettings settings,
                                     int maxAttempts, int attempt, Chunk chunk,
@@ -419,7 +462,7 @@ public final class RtpManager implements Listener {
     }
 
     public void shutdown() {
-        // O RTP não mantém executores próprios.
+        pendingChunks.clear();\n        activeLoadsByWorld.clear();\n        for (World world : Bukkit.getWorlds()) {\n            world.removePluginChunkTickets(plugin);\n        }
     }
 
     private void message(Player player, String key, String fallback,
