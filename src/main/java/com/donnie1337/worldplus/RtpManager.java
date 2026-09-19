@@ -233,10 +233,8 @@ public final class RtpManager implements Listener {
             }
         }
 
-        // A geração nunca acontece durante o /rtp. Para chunks já geradas,
-        // o próprio servidor controla o carregamento assíncrono e chama o
-        // callback na Server Thread quando a chunk estiver pronta. Isso evita
-        // que um jogador bloqueie o tick enquanto outro está fazendo RTP.
+        // Nunca gere uma chunk durante o /rtp. Somente chunks previamente
+        // geradas podem ser carregadas.
         if (!world.isChunkGenerated(chunkX, chunkZ)) {
             retry(request.player(), world, request.settings(), request.maxAttempts(), request.attempt(),
                     request.callback());
@@ -245,28 +243,20 @@ public final class RtpManager implements Listener {
 
         activeLoadsByWorld.merge(world.getUID(), 1, Integer::sum);
         pendingChunks.put(request.key(), request);
-
         try {
-            world.getChunkAtAsync(chunkX, chunkZ, false, chunk -> {
-                ChunkRequest current = pendingChunks.get(request.key());
-                if (current == null) return;
-
-                // O carregamento foi concluído pelo sistema de chunks. Agora
-                // adicionamos o ticket somente para impedir o unload enquanto
-                // o snapshot é analisado e o jogador é teleportado.
-                try {
-                    world.addPluginChunkTicket(chunkX, chunkZ, plugin);
-                } catch (Throwable ignored) {
-                }
-
-                handleLoadedChunk(current, chunk);
-            });
+            world.addPluginChunkTicket(chunkX, chunkZ, plugin);
         } catch (Throwable ignored) {
-            if (pendingChunks.remove(request.key()) != null) {
-                finishChunkLoad(request);
-            }
+            finishChunkLoad(request);
+            pendingChunks.remove(request.key());
             retry(request.player(), world, request.settings(), request.maxAttempts(), request.attempt(),
                     request.callback());
+            return;
+        }
+
+        // Se o carregamento foi concluído imediatamente, o ChunkLoadEvent pode
+        // já ter acontecido. Fazemos uma checagem no próximo tick.
+        if (world.isChunkLoaded(chunkX, chunkZ)) {
+            Bukkit.getScheduler().runTask(plugin, () -> onExpectedChunkLoaded(request.key()));
         }
     }
 
