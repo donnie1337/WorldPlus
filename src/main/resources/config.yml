@@ -108,7 +108,72 @@ rtp:
 
   gui:
     habilitado: true
+
+    # Tamanho do inventário. Use 9, 18, 27, 36, 45 ou 54.
+    tamanho: 27
+
+    # Título do menu.
     titulo: "&8&lRTP &8• &fEscolha o mundo"
+
+    # Preenchimento dos espaços vazios.
+    preenchimento:
+      habilitado: true
+      material: "GRAY_STAINED_GLASS_PANE"
+      nome: " "
+
+    # Cada mundo pode definir material, nome, lore e slot.
+    # Placeholders disponíveis na lore:
+    # {mundo} = nome exibido do mundo
+    # {id} = identificador do mundo
+    # {raio} = raio máximo configurado para o RTP
+    mundos:
+      overworld:
+        slot: 10
+        material: "GRASS_BLOCK"
+        nome: "&a&lMundo Normal"
+        lore:
+          - "&7&l• &fTeleportação aleatória"
+          - "&8"
+          - "&7Mundo: &f{mundo}"
+          - "&7Raio de exploração: &b{raio} blocos"
+          - "&8"
+          - "&a&lClique para teleportar"
+
+      mineracao:
+        slot: 12
+        material: "DIAMOND_PICKAXE"
+        nome: "&e&lMineração"
+        lore:
+          - "&7&l• &fTeleportação aleatória"
+          - "&8"
+          - "&7Mundo: &f{mundo}"
+          - "&7Raio de exploração: &b{raio} blocos"
+          - "&8"
+          - "&a&lClique para teleportar"
+
+      nether:
+        slot: 14
+        material: "NETHERRACK"
+        nome: "&c&lNether"
+        lore:
+          - "&7&l• &fTeleportação aleatória"
+          - "&8"
+          - "&7Mundo: &f{mundo}"
+          - "&7Raio de exploração: &b{raio} blocos"
+          - "&8"
+          - "&a&lClique para teleportar"
+
+      end:
+        slot: 16
+        material: "END_STONE"
+        nome: "&5&lThe End"
+        lore:
+          - "&7&l• &fTeleportação aleatória"
+          - "&8"
+          - "&7Mundo: &f{mundo}"
+          - "&7Raio de exploração: &b{raio} blocos"
+          - "&8"
+          - "&a&lClique para teleportar"
 
   mundos:
     overworld:
