@@ -55,14 +55,6 @@ public final class RtpManager implements Listener {
             return;
         }
 
-        long remaining = cooldownRemaining(player);
-        if (remaining > 0) {
-            message(player, "cooldown",
-                    "&cAguarde &f{tempo} segundos &cpara usar o teleporte novamente.",
-                    "tempo", Long.toString(remaining));
-            return;
-        }
-
         UUID uuid = player.getUniqueId();
         if (pendingWorlds.containsKey(uuid)) {
             message(player, "cooldown",
@@ -71,8 +63,6 @@ public final class RtpManager implements Listener {
             return;
         }
 
-        long reservation = Math.max(1L, cooldownSeconds(settings));
-        cooldowns.put(uuid, System.currentTimeMillis() + reservation * 1000L);
         pendingWorlds.put(uuid, settings.id());
 
         if (plugin.getTitleManager() != null) {
@@ -134,8 +124,6 @@ public final class RtpManager implements Listener {
 
                 removeTicket(location.getWorld(), location.getChunk().getX(), location.getChunk().getZ());
 
-                long cooldown = cooldownSeconds(settings);
-                cooldowns.put(player.getUniqueId(), System.currentTimeMillis() + cooldown * 1000L);
                 completeTeleport(player, settings, location);
             });
         });
