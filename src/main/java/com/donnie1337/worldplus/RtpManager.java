@@ -30,6 +30,7 @@ public final class RtpManager implements Listener {
     private final Map<ChunkKey, ChunkRequest> pendingChunks = new HashMap<>();
     private final Map<UUID, Integer> activeLoadsByWorld = new HashMap<>();
     private static final int MAX_CONCURRENT_CHUNK_LOADS = 1;
+    private boolean queuePumpScheduled;
 
     public RtpManager(WorldPlus plugin) {
         this.plugin = plugin;
@@ -175,20 +176,29 @@ public final class RtpManager implements Listener {
     }
 
     private void processChunkQueue() {
-        if (pendingChunks.isEmpty()) return;
+        if (pendingChunks.isEmpty() || queuePumpScheduled) return;
 
-        ChunkRequest selected = null;
-        for (ChunkRequest request : pendingChunks.values()) {
-            if (!request.player().isOnline()) continue;
-            if (!worldLoadActive(request.world())) {
-                selected = request;
-                break;
+        queuePumpScheduled = true;
+        Bukkit.getScheduler().runTask(plugin, () -> {
+            queuePumpScheduled = false;
+
+            ChunkRequest selected = null;
+            for (ChunkRequest request : pendingChunks.values()) {
+                if (!request.player().isOnline()) continue;
+                if (!worldLoadActive(request.world())) {
+                    selected = request;
+                    break;
+                }
             }
-        }
 
-        if (selected != null) {
-            startChunkPreparation(selected);
-        }
+            if (selected != null) {
+                startChunkPreparation(selected);
+            }
+
+            if (!pendingChunks.isEmpty()) {
+                processChunkQueue();
+            }
+        });
     }
 
     private boolean worldLoadActive(World world) {
@@ -439,6 +449,7 @@ public final class RtpManager implements Listener {
     }
 
     public void shutdown() {
+        queuePumpScheduled = false;
         pendingChunks.clear();
         activeLoadsByWorld.clear();
         for (World world : Bukkit.getWorlds()) {
