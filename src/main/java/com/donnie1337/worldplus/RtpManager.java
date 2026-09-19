@@ -311,7 +311,7 @@ public final class RtpManager implements Listener {
         // para encontrar um destino seguro. Capturar esses dados no thread
         // principal aumenta o custo justamente no caminho crítico do RTP.
         // O snapshot básico é thread-safe e será analisado fora do servidor.
-        ChunkSnapshot snapshot = chunk.getChunkSnapshot(false, false, false);
+        ChunkSnapshot snapshot = chunk.getChunkSnapshot(true, false, false);
         int minHeight = request.world().getMinHeight();
         int maxHeight = request.world().getMaxHeight();
 
