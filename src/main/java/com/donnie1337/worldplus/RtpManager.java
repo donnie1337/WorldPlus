@@ -18,8 +18,14 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.ThreadLocalRandom;
+import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
+import java.lang.reflect.Method;
 
 public final class RtpManager implements Listener {
     private final WorldPlus plugin;
@@ -27,6 +33,13 @@ public final class RtpManager implements Listener {
     private final Map<UUID, Long> delays = new HashMap<>();
     private final Map<UUID, String> pendingWorlds = new HashMap<>();
     private final Map<String, Long> heatmap = new HashMap<>();
+    private final ConcurrentLinkedQueue<Runnable> chunkLoadQueue = new ConcurrentLinkedQueue<>();
+    private final AtomicInteger activeChunkLoads = new AtomicInteger();
+    private final ExecutorService rtpExecutor = Executors.newFixedThreadPool(2, runnable -> {
+        Thread thread = new Thread(runnable, "WorldPlus-RTP");
+        thread.setDaemon(true);
+        return thread;
+    });
 
     public RtpManager(WorldPlus plugin) {
         this.plugin = plugin;
@@ -193,29 +206,120 @@ public final class RtpManager implements Listener {
             return;
         }
 
-        /*
-         * A API Bukkit usada pelo projeto não possui getChunkAtAsync.
-         * O carregamento da chunk precisa acontecer no thread principal,
-         * mas fora do fluxo atual do tick que pode estar executando
-         * DistanceManager.runAllUpdates().
-         *
-         * Por isso o pedido é sempre adiado para o próximo ciclo do servidor.
-         * Depois que a única chunk escolhida estiver carregada, o snapshot é
-         * criado e a análise pesada continua de forma assíncrona.
-         */
-        Bukkit.getScheduler().runTask(plugin, () -> {
-            if (!player.isOnline()) {
-                callback.accept(null);
-                return;
+        // Nunca usamos World#getChunkAt(..., true) para RTP: essa chamada pode
+        // gerar uma chunk inteira no thread principal e travar dezenas de ticks.
+        // Em vez disso, pedimos ao ServerChunkCache a ChunkStatus.FULL através
+        // do future interno do servidor. O próprio sistema de chunks controla
+        // a geração; limitamos ainda o número de RTPs simultâneos a 2.
+        enqueueChunkLoad(() -> loadChunkAsync(
+                player, world, settings, maxAttempts, attempt, chunkX, chunkZ, callback
+        ));
+    }
+
+    private void enqueueChunkLoad(Runnable task) {
+        chunkLoadQueue.add(task);
+        pumpChunkLoads();
+    }
+
+    private void pumpChunkLoads() {
+        while (activeChunkLoads.get() < 2) {
+            Runnable task = chunkLoadQueue.poll();
+            if (task == null) return;
+            activeChunkLoads.incrementAndGet();
+            try {
+                task.run();
+            } catch (Throwable throwable) {
+                activeChunkLoads.decrementAndGet();
+                getLogger().warning("Falha ao iniciar carregamento de chunk do RTP: " + throwable.getMessage());
+            }
+        }
+    }
+
+    private void finishChunkLoadSlot() {
+        activeChunkLoads.decrementAndGet();
+        pumpChunkLoads();
+    }
+
+    private void loadChunkAsync(Player player, World world, WorldSettings settings,
+                                int maxAttempts, int attempt, int chunkX, int chunkZ,
+                                Consumer<Location> callback) {
+        if (!player.isOnline()) {
+            finishChunkLoadSlot();
+            callback.accept(null);
+            return;
+        }
+
+        if (world.isChunkLoaded(chunkX, chunkZ)) {
+            finishChunkLoadSlot();
+            inspectChunk(player, world, settings, maxAttempts, attempt, chunkX, chunkZ, callback);
+            return;
+        }
+
+        try {
+            Object serverLevel = world.getClass().getMethod("getHandle").invoke(world);
+            Object chunkSource = serverLevel.getClass().getMethod("getChunkSource").invoke(serverLevel);
+            Class<?> chunkStatusClass = Class.forName("net.minecraft.world.level.chunk.status.ChunkStatus");
+            Object fullStatus = chunkStatusClass.getField("FULL").get(null);
+
+            Method getChunkFuture = null;
+            for (Method method : chunkSource.getClass().getMethods()) {
+                if (!method.getName().equals("getChunkFuture") || method.getParameterCount() != 4) continue;
+                getChunkFuture = method;
+                break;
             }
 
-            try {
-                Chunk chunk = world.getChunkAt(chunkX, chunkZ, true);
-                inspectLoadedChunk(player, world, settings, maxAttempts, attempt, chunk, callback);
-            } catch (Throwable throwable) {
-                retry(player, world, settings, maxAttempts, attempt, callback);
+            if (getChunkFuture == null) {
+                throw new NoSuchMethodException("ServerChunkCache#getChunkFuture");
             }
-        });
+
+            Object futureObject = getChunkFuture.invoke(
+                    chunkSource, chunkX, chunkZ, fullStatus, true
+            );
+            if (!(futureObject instanceof CompletableFuture<?> future)) {
+                throw new IllegalStateException("getChunkFuture não retornou CompletableFuture");
+            }
+
+            // O primeiro callback sai do thread que completa o future de chunks.
+            // Isso evita reentrância no DistanceManager durante runAllUpdates().
+            future.whenCompleteAsync((result, throwable) -> {
+                if (throwable != null || result == null) {
+                    finishChunkLoadSlot();
+                    Bukkit.getScheduler().runTask(plugin,
+                            () -> retry(player, world, settings, maxAttempts, attempt, callback));
+                    return;
+                }
+
+                Bukkit.getScheduler().runTask(plugin, () -> {
+                    try {
+                        if (!player.isOnline()) {
+                            callback.accept(null);
+                            return;
+                        }
+
+                        if (!world.isChunkLoaded(chunkX, chunkZ)) {
+                            retry(player, world, settings, maxAttempts, attempt, callback);
+                            return;
+                        }
+
+                        Chunk chunk = world.getChunkAt(chunkX, chunkZ, false);
+                        inspectLoadedChunk(player, world, settings, maxAttempts, attempt, chunk, callback);
+                    } catch (Throwable ignored) {
+                        retry(player, world, settings, maxAttempts, attempt, callback);
+                    } finally {
+                        finishChunkLoadSlot();
+                    }
+                });
+            }, rtpExecutor);
+        } catch (Throwable throwable) {
+            finishChunkLoadSlot();
+            Bukkit.getScheduler().runTask(plugin,
+                    () -> retry(player, world, settings, maxAttempts, attempt, callback));
+        }
+    }
+
+    private void shutdownRtpExecutor() {
+        rtpExecutor.shutdownNow();
+        chunkLoadQueue.clear();
     }
 
     private void inspectChunk(Player player, World world, WorldSettings settings,
@@ -394,6 +498,10 @@ public final class RtpManager implements Listener {
         pendingWorlds.remove(uuid);
         delays.remove(uuid);
         cooldowns.remove(uuid);
+    }
+
+    public void shutdown() {
+        shutdownRtpExecutor();
     }
 
     private void message(Player player, String key, String fallback,
