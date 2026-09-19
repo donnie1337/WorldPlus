@@ -462,7 +462,11 @@ public final class RtpManager implements Listener {
     }
 
     public void shutdown() {
-        pendingChunks.clear();\n        activeLoadsByWorld.clear();\n        for (World world : Bukkit.getWorlds()) {\n            world.removePluginChunkTickets(plugin);\n        }
+        pendingChunks.clear();
+        activeLoadsByWorld.clear();
+        for (World world : Bukkit.getWorlds()) {
+            world.removePluginChunkTickets(plugin);
+        }
     }
 
     private void message(Player player, String key, String fallback,
