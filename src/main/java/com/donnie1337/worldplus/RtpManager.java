@@ -15,9 +15,12 @@ import org.bukkit.event.player.PlayerMoveEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.event.world.ChunkLoadEvent;
 
+import java.util.ArrayDeque;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.function.Consumer;
@@ -30,10 +33,18 @@ public final class RtpManager implements Listener {
     private final Map<String, Long> heatmap = new HashMap<>();
     private final Map<ChunkKey, ChunkRequest> pendingChunks = new HashMap<>();
     private final Map<UUID, Integer> activeLoadsByWorld = new HashMap<>();
+    private final Map<UUID, ArrayDeque<PreparedDestination>> preparedDestinations = new HashMap<>();
+    private final Set<UUID> preparingWorlds = new HashSet<>();
     private static final int MAX_CONCURRENT_CHUNK_LOADS = 1;
+    private static final int RTP_POOL_TARGET = 16;
+    private static final long RTP_POOL_REFILL_PERIOD_TICKS = 20L;
 
     public RtpManager(WorldPlus plugin) {
         this.plugin = plugin;
+        // O RTP nunca carrega a chunk no momento do clique. O pool é abastecido
+        // gradualmente antes do uso, para que vários jogadores possam pedir RTP
+        // ao mesmo tempo sem disputar o carregamento de uma chunk na Server Thread.
+        Bukkit.getScheduler().runTaskTimer(plugin, this::refillPreparedPools, 20L, RTP_POOL_REFILL_PERIOD_TICKS);
     }
 
     public void request(Player player, String worldId) {
@@ -91,9 +102,197 @@ public final class RtpManager implements Listener {
         Bukkit.getScheduler().runTaskLater(plugin, () -> {
             if (!player.isOnline() || !pendingWorlds.containsKey(uuid)) return;
             delays.remove(uuid);
-            findAndTeleport(player, settings);
+            waitForPreparedDestination(player, settings);
         }, 10L);
     }
+
+
+    /**
+     * Aguarda um destino que já foi sorteado, carregado e validado pelo pool.
+     * Nenhuma chunk é carregada pelo clique do jogador.
+     */
+    private void waitForPreparedDestination(Player player, WorldSettings settings) {
+        if (!player.isOnline() || !pendingWorlds.containsKey(player.getUniqueId())) {
+            clear(player);
+            return;
+        }
+
+        World world = Bukkit.getWorld(settings.name());
+        if (world == null) {
+            world = plugin.createOrLoadWorld(settings);
+        }
+        if (world == null) {
+            message(player, "erro", "&cNão foi possível carregar o mundo de RTP.", null, null);
+            clear(player);
+            return;
+        }
+
+        ArrayDeque<PreparedDestination> pool = preparedDestinations.get(world.getUID());
+        PreparedDestination destination = pool == null ? null : pool.pollFirst();
+
+        if (destination == null) {
+            // O pool continua sendo abastecido em paralelo. O jogador fica
+            // aguardando sem iniciar qualquer carregamento de chunk.
+            Bukkit.getScheduler().runTaskLater(plugin,
+                    () -> waitForPreparedDestination(player, settings), 5L);
+            return;
+        }
+
+        completePreparedTeleport(player, settings, destination);
+    }
+
+    private void completePreparedTeleport(Player player, WorldSettings settings,
+                                           PreparedDestination destination) {
+        UUID uuid = player.getUniqueId();
+        Bukkit.getScheduler().runTask(plugin, () -> {
+            if (!player.isOnline() || !pendingWorlds.containsKey(uuid)) {
+                releasePreparedDestination(destination);
+                clear(player);
+                return;
+            }
+
+            Location location = destination.location();
+            boolean teleported = player.teleport(
+                    location,
+                    org.bukkit.event.player.PlayerTeleportEvent.TeleportCause.PLUGIN
+            );
+
+            if (!teleported) {
+                releasePreparedDestination(destination);
+                cooldowns.remove(uuid);
+                message(player, "local-nao-encontrado",
+                        "&cNão foi possível concluir o teleporte para o local preparado.", null, null);
+                clear(player);
+                return;
+            }
+
+            long cooldown = cooldownSeconds(settings);
+            cooldowns.put(uuid, System.currentTimeMillis() + cooldown * 1000L);
+            completeTeleport(player, settings, location);
+
+            // O jogador já está no destino; o ticket é mantido por alguns
+            // segundos para evitar uma descarga imediata da chunk recém-usada.
+            Bukkit.getScheduler().runTaskLater(plugin,
+                    () -> releasePreparedDestination(destination), 40L);
+        });
+    }
+
+    private void refillPreparedPools() {
+        for (WorldSettings settings : plugin.getWorlds().values()) {
+            World world = Bukkit.getWorld(settings.name());
+            if (world == null) continue;
+
+            ArrayDeque<PreparedDestination> pool =
+                    preparedDestinations.computeIfAbsent(world.getUID(), ignored -> new ArrayDeque<>());
+
+            if (pool.size() >= RTP_POOL_TARGET || preparingWorlds.contains(world.getUID())) {
+                continue;
+            }
+
+            prepareRandomDestination(world);
+            // Somente uma preparação por tick. O carregamento de uma chunk pode
+            // ser pesado, então não empilhamos várias cargas no mesmo tick.
+            break;
+        }
+    }
+
+    private void prepareRandomDestination(World world) {
+        UUID worldId = world.getUID();
+        preparingWorlds.add(worldId);
+
+        int[] coordinates = randomWorldCoordinate(world);
+        int x = coordinates[0];
+        int z = coordinates[1];
+        int chunkX = x >> 4;
+        int chunkZ = z >> 4;
+        ChunkKey key = new ChunkKey(worldId, chunkX, chunkZ);
+
+        if (!world.getWorldBorder().isInside(new Location(world, x + 0.5D, world.getMinHeight(), z + 0.5D))) {
+            preparingWorlds.remove(worldId);
+            return;
+        }
+
+        // Nunca usar uma chunk que ainda não existe para o pool. Assim o
+        // preparador não gera terreno novo durante a operação de RTP.
+        if (!world.isChunkGenerated(chunkX, chunkZ)) {
+            preparingWorlds.remove(worldId);
+            Bukkit.getScheduler().runTaskLater(plugin, () -> refillPreparedPools(), 1L);
+            return;
+        }
+
+        try {
+            world.addPluginChunkTicket(chunkX, chunkZ, plugin);
+        } catch (Throwable ignored) {
+            preparingWorlds.remove(worldId);
+            return;
+        }
+
+        Bukkit.getScheduler().runTaskLater(plugin, () -> {
+            Chunk chunk = null;
+            for (Chunk loaded : world.getLoadedChunks()) {
+                if (loaded.getX() == chunkX && loaded.getZ() == chunkZ) {
+                    chunk = loaded;
+                    break;
+                }
+            }
+
+            if (chunk == null) {
+                releasePreparedTicket(world, chunkX, chunkZ);
+                preparingWorlds.remove(worldId);
+                return;
+            }
+
+            ChunkSnapshot snapshot = chunk.getChunkSnapshot(true, false, false);
+            Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
+                Location safe = findSafeColumn(world, snapshot);
+
+                Bukkit.getScheduler().runTask(plugin, () -> {
+                    preparingWorlds.remove(worldId);
+
+                    if (safe == null) {
+                        releasePreparedTicket(world, chunkX, chunkZ);
+                        return;
+                    }
+
+                    preparedDestinations
+                            .computeIfAbsent(worldId, ignored -> new ArrayDeque<>())
+                            .addLast(new PreparedDestination(
+                                    world, chunkX, chunkZ, safe));
+                });
+            });
+        }, 1L);
+    }
+
+    private int[] randomWorldCoordinate(World world) {
+        var border = world.getWorldBorder();
+        double half = border.getSize() / 2.0D;
+        double centerX = border.getCenter().getX();
+        double centerZ = border.getCenter().getZ();
+
+        int minX = (int) Math.ceil(centerX - half);
+        int maxXExclusive = (int) Math.ceil(centerX + half);
+        int minZ = (int) Math.ceil(centerZ - half);
+        int maxZExclusive = (int) Math.ceil(centerZ + half);
+
+        ThreadLocalRandom random = ThreadLocalRandom.current();
+        return new int[] {
+                random.nextInt(minX, maxXExclusive),
+                random.nextInt(minZ, maxZExclusive)
+        };
+    }
+
+    private void releasePreparedDestination(PreparedDestination destination) {
+        releasePreparedTicket(destination.world(), destination.chunkX(), destination.chunkZ());
+    }
+
+    private void releasePreparedTicket(World world, int chunkX, int chunkZ) {
+        try {
+            world.removePluginChunkTicket(chunkX, chunkZ, plugin);
+        } catch (Throwable ignored) {
+        }
+    }
+
+    private record PreparedDestination(World world, int chunkX, int chunkZ, Location location) {}
 
     private void findAndTeleport(Player player, WorldSettings settings) {
         if (!player.isOnline()) {
@@ -480,6 +679,8 @@ public final class RtpManager implements Listener {
     public void shutdown() {
         pendingChunks.clear();
         activeLoadsByWorld.clear();
+        preparedDestinations.clear();
+        preparingWorlds.clear();
         for (World world : Bukkit.getWorlds()) {
             world.removePluginChunkTickets(plugin);
         }
