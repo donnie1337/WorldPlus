@@ -182,36 +182,28 @@ public final class RtpManager implements Listener {
         }
 
         /*
-         * 26.2 precisa que a continuação do future de chunk não seja executada
-         * inline no thread do servidor durante DistanceManager.runAllUpdates().
+         * A API Bukkit usada pelo projeto não possui getChunkAtAsync.
+         * O carregamento da chunk precisa acontecer no thread principal,
+         * mas fora do fluxo atual do tick que pode estar executando
+         * DistanceManager.runAllUpdates().
          *
-         * O future pode completar no próprio processamento de chunks. Se a
-         * continuação continuar inline e voltar a tocar no sistema de chunks,
-         * o DistanceManager pode ser modificado enquanto está sendo iterado.
-         * Isso é exatamente o cenário que provoca o NPE em
-         * ReferenceOpenHashSet$SetIterator.
-         *
-         * Usamos whenCompleteAsync para quebrar essa continuação e, só depois,
-         * voltamos ao thread principal para criar o snapshot. Continua sendo
-         * apenas UMA chunk por tentativa.
+         * Por isso o pedido é sempre adiado para o próximo ciclo do servidor.
+         * Depois que a única chunk escolhida estiver carregada, o snapshot é
+         * criado e a análise pesada continua de forma assíncrona.
          */
-        world.getChunkAtAsync(chunkX, chunkZ, true).whenCompleteAsync((chunk, throwable) -> {
-            if (throwable != null || chunk == null) {
-                Bukkit.getScheduler().runTask(plugin,
-                        () -> retry(player, world, settings, maxAttempts, attempt, callback));
+        Bukkit.getScheduler().runTask(plugin, () -> {
+            if (!player.isOnline()) {
+                callback.accept(null);
                 return;
             }
 
-            Bukkit.getScheduler().runTask(plugin, () -> {
-                if (!player.isOnline()) {
-                    callback.accept(null);
-                    return;
-                }
-
+            try {
+                Chunk chunk = world.getChunkAt(chunkX, chunkZ, true);
                 inspectLoadedChunk(player, world, settings, maxAttempts, attempt, chunk, callback);
-            });
-        }, java.util.concurrent.ForkJoinPool.commonPool());
-    }
+            } catch (Throwable throwable) {
+                retry(player, world, settings, maxAttempts, attempt, callback);
+            }
+        });
 
     private void inspectChunk(Player player, World world, WorldSettings settings,
                               int maxAttempts, int attempt, int chunkX, int chunkZ,
