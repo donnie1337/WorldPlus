@@ -137,17 +137,12 @@ public final class RtpManager implements Listener {
                 );
 
                 if (!teleported) {
-                    removeRtpTicket(location.getWorld(), location.getBlockX() >> 4, location.getBlockZ() >> 4);
                     cooldowns.remove(player.getUniqueId());
                     message(player, "local-nao-encontrado",
                             "&cNão foi possível concluir o teleporte para o local preparado.", null, null);
                     clear(player);
                     return;
                 }
-
-                // A chunk foi mantida carregada pelo ticket durante o teleport.
-                // Agora que o jogador já está nela, podemos liberar o ticket.
-                removeRtpTicket(location.getWorld(), location.getBlockX() >> 4, location.getBlockZ() >> 4);
 
                 // Renova o cooldown a partir do teleporte efetivamente concluído.
                 long cooldown = cooldownSeconds(settings);
@@ -296,16 +291,11 @@ public final class RtpManager implements Listener {
 
                     Chunk chunk = request.world().getChunkAt(request.key().x(), request.key().z());
 
-                    // O future já deixou a chunk em FULL. Agora o ticket Bukkit
-                    // apenas retém a chunk durante a análise e o teleport; não
-                    // dispara a carga novamente.
-                    try {
-                        request.world().addPluginChunkTicket(request.key().x(), request.key().z(), plugin);
-                    } catch (Throwable ignoredTicket) {
-                        // A chunk já está carregada; se o ticket falhar, ainda
-                        // conseguimos concluir o RTP neste mesmo tick.
-                    }
-
+                    // O future já deixou a chunk em FULL. Não adicionamos um
+                    // ticket Bukkit aqui: em 26.x isso pode reentrar no
+                    // DistanceManager e transformar uma carga assíncrona em
+                    // trabalho síncrono no tick. O jogador passa a manter a
+                    // região ativa assim que o teleport é concluído.
                     if (pendingChunks.remove(request.key()) == null) return;
                     finishChunkLoad(request);
                     inspectLoadedChunk(request.player(), request.world(), request.settings(),
@@ -357,7 +347,6 @@ public final class RtpManager implements Listener {
 
             Bukkit.getScheduler().runTask(plugin, () -> {
                 if (!player.isOnline()) {
-                    removeRtpTicket(world, ticketChunkX, ticketChunkZ);
                     callback.accept(null);
                     return;
                 }
@@ -369,17 +358,9 @@ public final class RtpManager implements Listener {
                     return;
                 }
 
-                removeRtpTicket(world, ticketChunkX, ticketChunkZ);
                 retry(player, world, settings, maxAttempts, attempt, callback);
             });
         });
-    }
-
-    private void removeRtpTicket(World world, int chunkX, int chunkZ) {
-        try {
-            world.removePluginChunkTicket(chunkX, chunkZ, plugin);
-        } catch (Throwable ignored) {
-        }
     }
 
     private Location findSafeColumn(World world, ChunkSnapshot snapshot) {
