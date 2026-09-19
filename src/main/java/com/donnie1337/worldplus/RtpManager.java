@@ -199,148 +199,29 @@ public final class RtpManager implements Listener {
             return;
         }
 
-        if (world.isChunkLoaded(chunkX, chunkZ)) {
-            inspectChunk(player, world, settings, maxAttempts, attempt, chunkX, chunkZ, callback);
-            return;
-        }
-
-        // Nunca usamos World#getChunkAt(..., true) para RTP: essa chamada pode
-        // gerar uma chunk inteira no thread principal e travar dezenas de ticks.
-        // Em vez disso, pedimos ao ServerChunkCache a ChunkStatus.FULL através
-        // do future interno do servidor. O próprio sistema de chunks controla
-        // a geração; limitamos ainda o número de RTPs simultâneos a 2.
-        enqueueChunkLoad(() -> loadChunkAsync(
-                player, world, settings, maxAttempts, attempt, chunkX, chunkZ, callback
-        ));
-    }
-
-    private void enqueueChunkLoad(Runnable task) {
-        chunkLoadQueue.add(task);
-        pumpChunkLoads();
-    }
-
-    private void pumpChunkLoads() {
-        while (activeChunkLoads.get() < 2) {
-            Runnable task = chunkLoadQueue.poll();
-            if (task == null) return;
-            activeChunkLoads.incrementAndGet();
-            try {
-                task.run();
-            } catch (Throwable throwable) {
-                activeChunkLoads.decrementAndGet();
-                plugin.getLogger().warning("Falha ao iniciar carregamento de chunk do RTP: " + throwable.getMessage());
-            }
-        }
-    }
-
-    private void finishChunkLoadSlot() {
-        activeChunkLoads.decrementAndGet();
-        Bukkit.getScheduler().runTask(plugin, this::pumpChunkLoads);
-    }
-
-    private void loadChunkAsync(Player player, World world, WorldSettings settings,
-                                int maxAttempts, int attempt, int chunkX, int chunkZ,
-                                Consumer<Location> callback) {
-        if (!player.isOnline()) {
-            finishChunkLoadSlot();
-            callback.accept(null);
-            return;
-        }
-
-        if (world.isChunkLoaded(chunkX, chunkZ)) {
-            finishChunkLoadSlot();
-            inspectChunk(player, world, settings, maxAttempts, attempt, chunkX, chunkZ, callback);
-            return;
-        }
-
+        // Não acessamos o sistema NMS de futures diretamente. Esse acesso estava
+        // reentrando no DistanceManager do 26.2 e provocando o NPE em
+        // ReferenceOpenHashSet durante o tick do jogador.
+        //
+        // Primeiro usamos uma chunk já carregada. Se não estiver carregada,
+        // somente aceitamos uma chunk que já tenha sido gerada. Assim o RTP nunca
+        // dispara geração de terreno novo através de reflexão/NMS.
         try {
-            Object serverLevel = world.getClass().getMethod("getHandle").invoke(world);
-            Object chunkSource = serverLevel.getClass().getMethod("getChunkSource").invoke(serverLevel);
-            Class<?> chunkStatusClass;
-            try {
-                chunkStatusClass = Class.forName("net.minecraft.world.level.chunk.status.ChunkStatus");
-            } catch (ClassNotFoundException ignored) {
-                chunkStatusClass = Class.forName("net.minecraft.world.level.chunk.ChunkStatus");
-            }
-            Object fullStatus = chunkStatusClass.getField("FULL").get(null);
-
-            Method getChunkFuture = null;
-            for (Method method : chunkSource.getClass().getMethods()) {
-                if (!method.getName().equals("getChunkFuture") || method.getParameterCount() != 4) continue;
-                getChunkFuture = method;
-                break;
+            if (world.isChunkLoaded(chunkX, chunkZ)) {
+                inspectChunk(player, world, settings, maxAttempts, attempt, chunkX, chunkZ, callback);
+                return;
             }
 
-            if (getChunkFuture == null) {
-                throw new NoSuchMethodException("ServerChunkCache#getChunkFuture");
+            if (!world.isChunkGenerated(chunkX, chunkZ)) {
+                retry(player, world, settings, maxAttempts, attempt, callback);
+                return;
             }
 
-            Object futureObject = getChunkFuture.invoke(
-                    chunkSource, chunkX, chunkZ, fullStatus, true
-            );
-            if (!(futureObject instanceof CompletableFuture<?> future)) {
-                throw new IllegalStateException("getChunkFuture não retornou CompletableFuture");
-            }
-
-            // O primeiro callback sai do thread que completa o future de chunks.
-            // Isso evita reentrância no DistanceManager durante runAllUpdates().
-            future.whenCompleteAsync((result, throwable) -> {
-                if (throwable != null || result == null) {
-                    finishChunkLoadSlot();
-                    Bukkit.getScheduler().runTask(plugin,
-                            () -> retry(player, world, settings, maxAttempts, attempt, callback));
-                    return;
-                }
-
-                Bukkit.getScheduler().runTask(plugin, () -> {
-                    try {
-                        if (!player.isOnline()) {
-                            callback.accept(null);
-                            return;
-                        }
-
-                        if (!world.isChunkLoaded(chunkX, chunkZ)) {
-                            retry(player, world, settings, maxAttempts, attempt, callback);
-                            return;
-                        }
-
-                        // O future confirmou a geração/carga. Não acessamos o wrapper
-                        // Bukkit no mesmo callback do sistema de chunks: a chamada
-                        // imediata pode reentrar no DistanceManager enquanto ele ainda
-                        // finaliza suas atualizações. Adiamos para o próximo tick.
-                        Bukkit.getScheduler().runTask(plugin, () -> {
-                            try {
-                                if (!player.isOnline() || !world.isChunkLoaded(chunkX, chunkZ)) {
-                                    retry(player, world, settings, maxAttempts, attempt, callback);
-                                    return;
-                                }
-
-                                Chunk chunk = world.getChunkAt(chunkX, chunkZ, false);
-                                inspectLoadedChunk(player, world, settings, maxAttempts, attempt, chunk, callback);
-                            } catch (Throwable ignored) {
-                                retry(player, world, settings, maxAttempts, attempt, callback);
-                            } finally {
-                                finishChunkLoadSlot();
-                            }
-                        });
-                        return;
-                    } catch (Throwable ignored) {
-                        retry(player, world, settings, maxAttempts, attempt, callback);
-                    } finally {
-                        finishChunkLoadSlot();
-                    }
-                });
-            }, rtpExecutor);
-        } catch (Throwable throwable) {
-            finishChunkLoadSlot();
-            Bukkit.getScheduler().runTask(plugin,
-                    () -> retry(player, world, settings, maxAttempts, attempt, callback));
+            Chunk chunk = world.getChunkAt(chunkX, chunkZ, false);
+            inspectLoadedChunk(player, world, settings, maxAttempts, attempt, chunk, callback);
+        } catch (Throwable ignored) {
+            retry(player, world, settings, maxAttempts, attempt, callback);
         }
-    }
-
-    private void shutdownRtpExecutor() {
-        rtpExecutor.shutdownNow();
-        chunkLoadQueue.clear();
     }
 
     private void inspectChunk(Player player, World world, WorldSettings settings,
