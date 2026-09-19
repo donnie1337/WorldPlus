@@ -306,10 +306,16 @@ public final class RtpManager implements Listener {
     }
 
     private void inspectLoadedChunk(ChunkRequest request, Chunk chunk) {
-        ChunkSnapshot snapshot = chunk.getChunkSnapshot(true, false, false);
+        // Não precisamos do mapa de "altura máxima por coluna" nem de biomas
+        // para encontrar um destino seguro. Capturar esses dados no thread
+        // principal aumenta o custo justamente no caminho crítico do RTP.
+        // O snapshot básico é thread-safe e será analisado fora do servidor.
+        ChunkSnapshot snapshot = chunk.getChunkSnapshot(false, false, false);
+        int minHeight = request.world().getMinHeight();
+        int maxHeight = request.world().getMaxHeight();
 
         Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
-            Location safe = findSafeColumn(request.world(), snapshot);
+            Location safe = findSafeColumn(request.world(), snapshot, minHeight, maxHeight);
 
             Bukkit.getScheduler().runTask(plugin, () -> {
                 if (!request.player().isOnline()) {
@@ -337,7 +343,8 @@ public final class RtpManager implements Listener {
         world.removePluginChunkTicket(chunkX, chunkZ, plugin);
     }
 
-    private Location findSafeColumn(World world, ChunkSnapshot snapshot) {
+    private Location findSafeColumn(World world, ChunkSnapshot snapshot,
+                                    int minHeight, int maxHeight) {
         ThreadLocalRandom random = ThreadLocalRandom.current();
         boolean nether = world.getEnvironment() == World.Environment.NETHER;
 
@@ -351,14 +358,18 @@ public final class RtpManager implements Listener {
 
             int y;
             if (nether) {
-                int maxY = Math.min(world.getMaxHeight() - 3, 125);
-                int minY = Math.max(world.getMinHeight(), 1);
+                int maxY = Math.min(maxHeight - 3, 125);
+                int minY = Math.max(minHeight, 1);
                 y = findNetherSafeY(snapshot, localX, localZ, maxY, minY);
             } else {
-                y = snapshot.getHighestBlockYAt(localX, localZ);
+                // O cálculo da altura acontece no worker usando o snapshot.
+                // Assim, o thread principal só captura os blocos e não precisa
+                // calcular 256 alturas antes de liberar o tick.
+                y = findOverworldSafeY(snapshot, localX, localZ,
+                        maxHeight - 3, minHeight);
             }
 
-            if (y < world.getMinHeight() || y + 2 >= world.getMaxHeight()) continue;
+            if (y < minHeight || y + 2 >= maxHeight) continue;
 
             Material floor = snapshot.getBlockType(localX, y, localZ);
             Material feet = snapshot.getBlockType(localX, y + 1, localZ);
@@ -375,6 +386,25 @@ public final class RtpManager implements Listener {
         }
 
         return null;
+    }
+
+    private int findOverworldSafeY(ChunkSnapshot snapshot, int localX, int localZ,
+                                    int maxY, int minY) {
+        for (int y = maxY; y >= minY; y--) {
+            Material floor = snapshot.getBlockType(localX, y, localZ);
+            if (floor == Material.BEDROCK || isLiquid(floor) || !floor.isSolid()) {
+                continue;
+            }
+
+            Material feet = snapshot.getBlockType(localX, y + 1, localZ);
+            Material head = snapshot.getBlockType(localX, y + 2, localZ);
+            if (isLiquid(feet) || isLiquid(head)
+                    || !feet.isAir() || !head.isAir()) {
+                continue;
+            }
+            return y;
+        }
+        return Integer.MIN_VALUE;
     }
 
     private int findNetherSafeY(ChunkSnapshot snapshot, int localX, int localZ,
