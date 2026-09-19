@@ -390,8 +390,13 @@ public final class RtpManager implements Listener {
     }
 
     private int findOverworldSafeY(ChunkSnapshot snapshot, int localX, int localZ,
-                                    int maxY, int minY) {
-        for (int y = maxY; y >= minY; y--) {
+                                   int maxY, int minY) {
+        // RTP do Overworld deve sair na superfície, nunca em uma caverna.
+        // Procuramos de cima para baixo pelo primeiro bloco de terreno exposto
+        // ao céu. Assim, uma camada de pedra dentro de uma caverna não pode ser
+        // escolhida como piso do teleporte.
+        int top = Math.min(maxY, snapshot.getHighestBlockYAt(localX, localZ));
+        for (int y = top; y >= minY; y--) {
             Material floor = snapshot.getBlockType(localX, y, localZ);
             if (floor == Material.BEDROCK || isLiquid(floor) || !floor.isSolid()) {
                 continue;
@@ -403,6 +408,19 @@ public final class RtpManager implements Listener {
                     || !feet.isAir() || !head.isAir()) {
                 continue;
             }
+
+            // A superfície precisa estar exposta ao céu. Se houver qualquer bloco
+            // sólido acima do jogador, trata-se de interior/caverna e continuamos.
+            boolean exposed = true;
+            for (int above = y + 1; above <= top; above++) {
+                Material blockAbove = snapshot.getBlockType(localX, above, localZ);
+                if (!blockAbove.isAir()) {
+                    exposed = false;
+                    break;
+                }
+            }
+            if (!exposed) continue;
+
             return y;
         }
         return Integer.MIN_VALUE;
