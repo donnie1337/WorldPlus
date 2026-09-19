@@ -18,7 +18,6 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
-import java.util.concurrent.CompletionStage;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.function.Consumer;
 
@@ -72,16 +71,10 @@ public final class RtpManager implements Listener {
             return;
         }
 
-        // Reserva imediatamente a janela do RTP. Isso impede que cliques
-        // consecutivos iniciem múltiplas buscas antes do primeiro teleporte
-        // terminar. Em caso de sucesso, o prazo é renovado a partir do
-        // teleporte concluído; em caso de falha, a reserva é removida.
         long reservation = Math.max(1L, cooldownSeconds(settings));
         cooldowns.put(uuid, System.currentTimeMillis() + reservation * 1000L);
         pendingWorlds.put(uuid, settings.id());
 
-        // O GUI já foi fechado pelo evento de clique. Agora o title aparece
-        // imediatamente e a preparação do RTP começa 0,5s depois.
         if (plugin.getTitleManager() != null) {
             plugin.getTitleManager().showRtpLoading(player, 10);
         }
@@ -129,14 +122,13 @@ public final class RtpManager implements Listener {
                     return;
                 }
 
-                // O destino já foi preparado e permanece preso pelo ticket até
-                // o teleport terminar, evitando um segundo carregamento da chunk.
                 boolean teleported = player.teleport(
                         location,
                         org.bukkit.event.player.PlayerTeleportEvent.TeleportCause.PLUGIN
                 );
 
                 if (!teleported) {
+                    removeTicket(location.getWorld(), location.getChunk().getX(), location.getChunk().getZ());
                     cooldowns.remove(player.getUniqueId());
                     message(player, "local-nao-encontrado",
                             "&cNão foi possível concluir o teleporte para o local preparado.", null, null);
@@ -144,7 +136,8 @@ public final class RtpManager implements Listener {
                     return;
                 }
 
-                // Renova o cooldown a partir do teleporte efetivamente concluído.
+                removeTicket(location.getWorld(), location.getChunk().getX(), location.getChunk().getZ());
+
                 long cooldown = cooldownSeconds(settings);
                 cooldowns.put(player.getUniqueId(), System.currentTimeMillis() + cooldown * 1000L);
                 completeTeleport(player, settings, location);
@@ -152,12 +145,6 @@ public final class RtpManager implements Listener {
         });
     }
 
-    /**
-     * Sorteia a coordenada primeiro, sem consultar as chunks carregadas.
-     * A chunk sorteada recebe um ticket temporário do plugin para que o
-     * sistema de chunks a carregue. Assim, uma chunk já carregada não tem
-     * qualquer vantagem na seleção do destino.
-     */
     private void findChunk(Player player, World world, WorldSettings settings,
                            int maxAttempts, int attempt, Consumer<Location> callback) {
         if (!player.isOnline() || attempt >= maxAttempts) {
@@ -200,6 +187,7 @@ public final class RtpManager implements Listener {
 
     private void processChunkQueue() {
         if (pendingChunks.isEmpty()) return;
+
         ChunkRequest selected = null;
         for (ChunkRequest request : pendingChunks.values()) {
             if (!request.player().isOnline()) continue;
@@ -208,7 +196,10 @@ public final class RtpManager implements Listener {
                 break;
             }
         }
-        if (selected != null) startChunkPreparation(selected);
+
+        if (selected != null) {
+            startChunkPreparation(selected);
+        }
     }
 
     private boolean worldLoadActive(World world) {
@@ -217,158 +208,105 @@ public final class RtpManager implements Listener {
 
     private void startChunkPreparation(ChunkRequest request) {
         pendingChunks.remove(request.key());
+
         World world = request.world();
         int chunkX = request.key().x();
         int chunkZ = request.key().z();
 
         if (world.isChunkLoaded(chunkX, chunkZ)) {
             Chunk chunk = world.getChunkAt(chunkX, chunkZ);
-            inspectLoadedChunk(request.player(), world, request.settings(), request.maxAttempts(),
-                    request.attempt(), chunk, request.callback(), chunkX, chunkZ);
+            inspectLoadedChunk(request, chunk);
             processChunkQueue();
             return;
         }
 
-        // Nunca gere uma chunk durante o /rtp. Somente chunks previamente
-        // geradas podem ser carregadas.
         if (!world.isChunkGenerated(chunkX, chunkZ)) {
-            retry(request.player(), world, request.settings(), request.maxAttempts(), request.attempt(),
-                    request.callback());
+            retry(request.player(), world, request.settings(), request.maxAttempts(),
+                    request.attempt(), request.callback());
+            processChunkQueue();
             return;
         }
 
         activeLoadsByWorld.merge(world.getUID(), 1, Integer::sum);
         pendingChunks.put(request.key(), request);
 
-        // IMPORTANTE: não usamos addPluginChunkTicket/loadChunk para iniciar o
-        // carregamento. A API Bukkit/Spigot faz essas operações de forma
-        // bloqueante quando a chunk ainda não está carregada. No 26.x o próprio
-        // ServerChunkCache possui getChunkFuture(...), que arma o pipeline de
-        // chunks e devolve um CompletableFuture sem bloquear o tick.
-        requestChunkFuture(request);
-    }
-
-    private void requestChunkFuture(ChunkRequest request) {
+        // Caminho seguro para Spigot: não usamos NMS ServerChunkCache/
+        // DistanceManager. A API oficial de ticket é responsável pelo
+        // carregamento e mantém a chunk viva até o teleport.
         try {
-            Object handle = worldHandle(request.world());
-            Object chunkSource = handle.getClass().getMethod("getChunkSource").invoke(handle);
-            Class<?> statusClass = findChunkStatusClass();
-            Object fullStatus = statusClass.getField("FULL").get(null);
-
-            Object futureObject = chunkSource.getClass()
-                    .getMethod("getChunkFuture", int.class, int.class, statusClass, boolean.class)
-                    .invoke(chunkSource, request.key().x(), request.key().z(), fullStatus, true);
-
-            if (!(futureObject instanceof CompletionStage<?> stage)) {
-                throw new IllegalStateException("ServerChunkCache#getChunkFuture não retornou CompletionStage");
+            if (!world.addPluginChunkTicket(chunkX, chunkZ, plugin)) {
+                scheduleChunkCheck(request);
+                return;
             }
 
-            // O 26.x pode completar o future inline dentro do DistanceManager.
-            // A continuação do RTP precisa obrigatoriamente sair dessa thread
-            // antes de tocar novamente no sistema de chunks.
-            stage.whenCompleteAsync((ignored, error) -> {
-                Bukkit.getScheduler().runTask(plugin, () -> {
-                    if (error != null || !request.player().isOnline()) {
-                        finishChunkLoad(request);
-                        pendingChunks.remove(request.key());
-                        if (!request.player().isOnline()) {
-                            return;
-                        }
-                        retry(request.player(), request.world(), request.settings(),
-                                request.maxAttempts(), request.attempt(), request.callback());
-                        processChunkQueue();
-                        return;
-                    }
-
-                    if (!request.world().isChunkLoaded(request.key().x(), request.key().z())) {
-                        finishChunkLoad(request);
-                        pendingChunks.remove(request.key());
-                        retry(request.player(), request.world(), request.settings(),
-                                request.maxAttempts(), request.attempt(), request.callback());
-                        processChunkQueue();
-                        return;
-                    }
-
-                    Chunk chunk = request.world().getChunkAt(request.key().x(), request.key().z());
-
-                    // O future já deixou a chunk em FULL. Não adicionamos um
-                    // ticket Bukkit aqui: em 26.x isso pode reentrar no
-                    // DistanceManager e transformar uma carga assíncrona em
-                    // trabalho síncrono no tick. O jogador passa a manter a
-                    // região ativa assim que o teleport é concluído.
-                    if (pendingChunks.remove(request.key()) == null) return;
-                    finishChunkLoad(request);
-                    inspectLoadedChunk(request.player(), request.world(), request.settings(),
-                            request.maxAttempts(), request.attempt(), chunk, request.callback(),
-                            request.key().x(), request.key().z());
-                    processChunkQueue();
-                });
-            }, command -> Bukkit.getScheduler().runTaskAsynchronously(plugin, command));
+            scheduleChunkCheck(request);
         } catch (Throwable ignored) {
             finishChunkLoad(request);
             pendingChunks.remove(request.key());
-            retry(request.player(), request.world(), request.settings(),
-                    request.maxAttempts(), request.attempt(), request.callback());
+            retry(request.player(), world, request.settings(), request.maxAttempts(),
+                    request.attempt(), request.callback());
             processChunkQueue();
         }
     }
 
-    private Object worldHandle(World world) throws ReflectiveOperationException {
-        return world.getClass().getMethod("getHandle").invoke(world);
+    private void scheduleChunkCheck(ChunkRequest request) {
+        Bukkit.getScheduler().runTaskLater(plugin, () -> {
+            if (pendingChunks.get(request.key()) != request) return;
+
+            if (!request.player().isOnline()) {
+                removeTicket(request.world(), request.key().x(), request.key().z());
+                finishChunkLoad(request);
+                pendingChunks.remove(request.key());
+                processChunkQueue();
+                return;
+            }
+
+            if (!request.world().isChunkLoaded(request.key().x(), request.key().z())) {
+                scheduleChunkCheck(request);
+                return;
+            }
+
+            Chunk chunk = request.world().getChunkAt(request.key().x(), request.key().z());
+            pendingChunks.remove(request.key());
+            finishChunkLoad(request);
+            inspectLoadedChunk(request, chunk);
+            processChunkQueue();
+        }, 1L);
     }
 
-    private Class<?> findChunkStatusClass() throws ClassNotFoundException {
-        try {
-            return Class.forName("net.minecraft.world.level.chunk.status.ChunkStatus");
-        } catch (ClassNotFoundException ignored) {
-            return Class.forName("net.minecraft.world.level.chunk.ChunkStatus");
-        }
-    }
-
-    private void finishChunkLoad(ChunkRequest request) {
-        UUID worldId = request.world().getUID();
-        activeLoadsByWorld.computeIfPresent(worldId, (id, count) -> count <= 1 ? null : count - 1);
-    }
-
-    private record ChunkKey(UUID worldId, int x, int z) {}
-    private record ChunkRequest(Player player, World world, WorldSettings settings, int maxAttempts,
-                                int attempt, Consumer<Location> callback, ChunkKey key) {}
-
-    private void inspectLoadedChunk(Player player, World world, WorldSettings settings,
-                                    int maxAttempts, int attempt, Chunk chunk,
-                                    Consumer<Location> callback, int ticketChunkX, int ticketChunkZ) {
-        // O snapshot é criado uma única vez na thread principal e todo o trabalho
-        // pesado de leitura/procura é feito fora dela. ChunkSnapshot é thread-safe
-        // por definição da API do Spigot.
+    private void inspectLoadedChunk(ChunkRequest request, Chunk chunk) {
         ChunkSnapshot snapshot = chunk.getChunkSnapshot(true, false, false);
 
         Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
-            Location safe = findSafeColumn(world, snapshot);
+            Location safe = findSafeColumn(request.world(), snapshot);
 
             Bukkit.getScheduler().runTask(plugin, () -> {
-                if (!player.isOnline()) {
-                    callback.accept(null);
+                if (!request.player().isOnline()) {
+                    removeTicket(request.world(), request.key().x(), request.key().z());
+                    request.callback().accept(null);
                     return;
                 }
 
                 if (safe != null) {
-                    // Keep the ticket alive through the actual teleport. Removing it
-                    // here could unload the destination before Player#teleport runs.
-                    callback.accept(safe);
+                    request.callback().accept(safe);
                     return;
                 }
 
-                retry(player, world, settings, maxAttempts, attempt, callback);
+                removeTicket(request.world(), request.key().x(), request.key().z());
+                retry(request.player(), request.world(), request.settings(),
+                        request.maxAttempts(), request.attempt(), request.callback());
             });
         });
+    }
+
+    private void removeTicket(World world, int chunkX, int chunkZ) {
+        world.removePluginChunkTicket(chunkX, chunkZ, plugin);
     }
 
     private Location findSafeColumn(World world, ChunkSnapshot snapshot) {
         ThreadLocalRandom random = ThreadLocalRandom.current();
         boolean nether = world.getEnvironment() == World.Environment.NETHER;
 
-        // A busca é feita no snapshot, não através de World#getBlockAt.
-        // Isso evita centenas/milhares de acessos ao mundo na thread principal.
         int columnsToCheck = nether ? 48 : 64;
         int start = random.nextInt(256);
 
@@ -416,8 +354,7 @@ public final class RtpManager implements Listener {
             Material feet = snapshot.getBlockType(localX, y + 1, localZ);
             Material head = snapshot.getBlockType(localX, y + 2, localZ);
 
-            if (floor == Material.BEDROCK
-                    || isLiquid(feet) || isLiquid(head)
+            if (isLiquid(feet) || isLiquid(head)
                     || !feet.isAir() || !head.isAir()) {
                 continue;
             }
@@ -440,7 +377,6 @@ public final class RtpManager implements Listener {
     }
 
     private void completeTeleport(Player player, WorldSettings settings, Location location) {
-        UUID uuid = player.getUniqueId();
         clear(player);
 
         if (plugin.getTitleManager() != null) {
@@ -455,6 +391,7 @@ public final class RtpManager implements Listener {
         UUID uuid = player.getUniqueId();
         pendingWorlds.remove(uuid);
         delays.remove(uuid);
+
         if (plugin.getTitleManager() != null) {
             plugin.getTitleManager().endRtpTitle(player);
         }
@@ -523,4 +460,10 @@ public final class RtpManager implements Listener {
         }
         player.sendMessage(ChatColor.translateAlternateColorCodes('&', message));
     }
+
+    private record ChunkKey(UUID worldId, int x, int z) {}
+
+    private record ChunkRequest(Player player, World world, WorldSettings settings,
+                                int maxAttempts, int attempt, Consumer<Location> callback,
+                                ChunkKey key) {}
 }
