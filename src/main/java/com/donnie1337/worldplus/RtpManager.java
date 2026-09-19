@@ -30,6 +30,7 @@ public final class RtpManager implements Listener {
     private final Map<ChunkKey, ChunkRequest> pendingChunks = new HashMap<>();
     private final Map<UUID, Integer> activeLoadsByWorld = new HashMap<>();
     private static final int MAX_CONCURRENT_CHUNK_LOADS = 1;
+    private static final long RTP_CHUNK_LOAD_BUDGET_MS = 35L;
     private boolean queuePumpScheduled;
     private long nextChunkLoadAllowedAtNanos;
     private long lastChunkLoadDurationMs;
