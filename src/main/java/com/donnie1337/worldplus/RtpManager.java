@@ -228,7 +228,7 @@ public final class RtpManager implements Listener {
                 task.run();
             } catch (Throwable throwable) {
                 activeChunkLoads.decrementAndGet();
-                getLogger().warning("Falha ao iniciar carregamento de chunk do RTP: " + throwable.getMessage());
+                plugin.getLogger().warning("Falha ao iniciar carregamento de chunk do RTP: " + throwable.getMessage());
             }
         }
     }
