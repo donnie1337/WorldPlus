@@ -57,7 +57,7 @@ public final class RtpManager implements Listener {
 
     private void warmOneChunk() {
         WorldSettings settings = null;
-        for (WorldSettings candidate : plugin.getSettingsMap().values()) {
+        for (WorldSettings candidate : plugin.getWorlds().values()) {
             if (warmPoolSize(candidate.id()) <= 0) continue;
             World world = Bukkit.getWorld(candidate.name());
             if (world == null) continue;
@@ -238,8 +238,8 @@ public final class RtpManager implements Listener {
         if (pool != null && !pool.isEmpty()) {
             WarmChunk warm = pool.pollFirst();
             if (warm != null && warm.location() != null) {
-                request.callback().accept(warm.location());
-                Bukkit.getScheduler().runTask(plugin, () -> { removeTicket(world, warm.key().x(), warm.key().z()); scheduleWarmup(); });
+                callback.accept(warm.location());
+                Bukkit.getScheduler().runTask(plugin, () -> scheduleWarmup());
                 return;
             }
         }
