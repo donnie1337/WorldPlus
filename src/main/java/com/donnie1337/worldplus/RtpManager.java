@@ -147,9 +147,10 @@ public final class RtpManager implements Listener {
     }
 
     /**
-     * Escolhe uma única chunk por tentativa e carrega somente essa chunk.
-     * Depois que ela estiver pronta, o RTP procura uma coluna segura dentro dela.
-     * Não existe fila global, pré-geração ou carregamento de várias chunks.
+     * Sorteia a coordenada primeiro, sem consultar as chunks carregadas.
+     * A chunk sorteada recebe um ticket temporário do plugin para que o
+     * sistema de chunks a carregue. Assim, uma chunk já carregada não tem
+     * qualquer vantagem na seleção do destino.
      */
     private void findChunk(Player player, World world, WorldSettings settings,
                            int maxAttempts, int attempt, Consumer<Location> callback) {
@@ -169,47 +170,77 @@ public final class RtpManager implements Listener {
         double centerZ = plugin.getConfig().getDouble(
                 path + ".centro-z", world.getWorldBorder().getCenter().getZ());
 
+        ThreadLocalRandom random = ThreadLocalRandom.current();
+        double minSquared = (double) minRadius * minRadius;
+        double maxSquared = (double) maxRadius * maxRadius;
+        double radius = Math.sqrt(random.nextDouble(minSquared, maxSquared));
+        double angle = random.nextDouble(0.0D, Math.PI * 2.0D);
+
+        int x = (int) Math.floor(centerX + Math.cos(angle) * radius);
+        int z = (int) Math.floor(centerZ + Math.sin(angle) * radius);
+        int chunkX = x >> 4;
+        int chunkZ = z >> 4;
+
+        Location probe = new Location(world, x + 0.5D, world.getMinHeight(), z + 0.5D);
+        if (!world.getWorldBorder().isInside(probe)) {
+            retry(player, world, settings, maxAttempts, attempt, callback);
+            return;
+        }
+
         try {
-            Chunk[] loadedChunks = world.getLoadedChunks();
-            if (loadedChunks.length == 0) {
+            // O sorteio já aconteceu antes de qualquer consulta à chunk.
+            // Se ela estiver carregada ou não, o destino é exatamente o
+            // resultado sorteado. O ticket apenas garante que essa chunk
+            // específica seja preparada pelo sistema de chunks.
+            boolean ticketAdded = world.addPluginChunkTicket(chunkX, chunkZ, plugin);
+            if (!ticketAdded && !world.isChunkLoaded(chunkX, chunkZ)) {
                 retry(player, world, settings, maxAttempts, attempt, callback);
                 return;
             }
 
-            ThreadLocalRandom random = ThreadLocalRandom.current();
-            int start = random.nextInt(loadedChunks.length);
-
-            // Só trabalhamos com chunks que já estão carregadas pelo servidor.
-            // Isso é proposital: getChunkAt()/loadChunk() entram no DistanceManager
-            // e podem reentrar no sistema de tickets do Spigot 26.x.
-            for (int offset = 0; offset < loadedChunks.length; offset++) {
-                Chunk chunk = loadedChunks[(start + offset) % loadedChunks.length];
-                int chunkX = chunk.getX();
-                int chunkZ = chunk.getZ();
-
-                double chunkCenterX = (chunkX << 4) + 8.0D;
-                double chunkCenterZ = (chunkZ << 4) + 8.0D;
-                double distanceSquared = Math.pow(chunkCenterX - centerX, 2.0D)
-                        + Math.pow(chunkCenterZ - centerZ, 2.0D);
-
-                if (distanceSquared < (double) minRadius * minRadius
-                        || distanceSquared > (double) maxRadius * maxRadius) {
-                    continue;
-                }
-
-                inspectLoadedChunk(player, world, settings, maxAttempts, attempt, chunk, callback);
-                return;
-            }
+            waitForRandomChunk(player, world, settings, maxAttempts, attempt,
+                    chunkX, chunkZ, callback, 0);
         } catch (Throwable ignored) {
-            // O RTP nunca pode deixar uma exceção do sistema de chunks derrubar o jogador.
+            retry(player, world, settings, maxAttempts, attempt, callback);
+        }
+    }
+
+    private void waitForRandomChunk(Player player, World world, WorldSettings settings,
+                                    int maxAttempts, int attempt,
+                                    int chunkX, int chunkZ,
+                                    Consumer<Location> callback, int waitTicks) {
+        if (!player.isOnline()) {
+            removeRtpTicket(world, chunkX, chunkZ);
+            callback.accept(null);
+            return;
         }
 
-        retry(player, world, settings, maxAttempts, attempt, callback);
+        if (world.isChunkLoaded(chunkX, chunkZ)) {
+            try {
+                Chunk chunk = world.getChunkAt(chunkX, chunkZ, false);
+                inspectLoadedChunk(player, world, settings, maxAttempts, attempt,
+                        chunk, callback, chunkX, chunkZ);
+            } catch (Throwable ignored) {
+                removeRtpTicket(world, chunkX, chunkZ);
+                retry(player, world, settings, maxAttempts, attempt, callback);
+            }
+            return;
+        }
+
+        if (waitTicks >= 100) {
+            removeRtpTicket(world, chunkX, chunkZ);
+            retry(player, world, settings, maxAttempts, attempt, callback);
+            return;
+        }
+
+        Bukkit.getScheduler().runTaskLater(plugin, () ->
+                waitForRandomChunk(player, world, settings, maxAttempts, attempt,
+                        chunkX, chunkZ, callback, waitTicks + 1), 1L);
     }
 
     private void inspectLoadedChunk(Player player, World world, WorldSettings settings,
                                     int maxAttempts, int attempt, Chunk chunk,
-                                    Consumer<Location> callback) {
+                                    Consumer<Location> callback, int ticketChunkX, int ticketChunkZ) {
         // O snapshot é criado uma única vez na thread principal e todo o trabalho
         // pesado de leitura/procura é feito fora dela. ChunkSnapshot é thread-safe
         // por definição da API do Spigot.
@@ -225,13 +256,22 @@ public final class RtpManager implements Listener {
                 }
 
                 if (safe != null) {
+                    removeRtpTicket(world, ticketChunkX, ticketChunkZ);
                     callback.accept(safe);
                     return;
                 }
 
+                removeRtpTicket(world, ticketChunkX, ticketChunkZ);
                 retry(player, world, settings, maxAttempts, attempt, callback);
             });
         });
+    }
+
+    private void removeRtpTicket(World world, int chunkX, int chunkZ) {
+        try {
+            world.removePluginChunkTicket(chunkX, chunkZ, plugin);
+        } catch (Throwable ignored) {
+        }
     }
 
     private Location findSafeColumn(World world, ChunkSnapshot snapshot) {
