@@ -28,7 +28,9 @@ public final class TitleManager implements Listener {
             "swamp", "mangrove_swamp", "savanna", "desert", "badlands",
             "meadow", "windswept_hills", "snowy_slopes", "ocean", "mushroom_fields",
             "lush_caves", "dripstone_caves", "deep_dark", "pale_garden",
-            "ice_spikes", "frozen_ocean", "warm_ocean", "deep_ocean"
+            "ice_spikes",
+            "nether_wastes", "crimson_forest", "warped_forest", "soul_sand_valley", "basalt_deltas",
+            "the_end", "end_highlands", "end_midlands", "small_end_islands", "end_barrens", "frozen_ocean", "warm_ocean", "deep_ocean"
     );
 
     public TitleManager(WorldPlus plugin) {
