@@ -251,7 +251,7 @@ titles:
     desert:
       mensagem: "&fᴅᴇsᴇʀᴛᴏ"
     plains:
-      mensagem: "&fᴘʟᴀɴÍᴄɪᴇs"
+      mensagem: "&fᴘʟᴀɴɪᴄɪᴇs"
     forest:
       mensagem: "&fғʟᴏʀᴇsᴛᴀ"
     jungle:
@@ -267,7 +267,7 @@ titles:
     snowy_taiga:
       mensagem: "&fᴛᴀɪɢᴀ ɴᴇᴠᴀᴅᴀ"
     snowy_plains:
-      mensagem: "&fᴘʟᴀɴÍᴄɪᴇs ɴᴇᴠᴀᴅᴀs"
+      mensagem: "&fᴘʟᴀɴɪᴄɪᴇs ɴᴇᴠᴀᴅᴀs"
     meadow:
       mensagem: "&fᴘʀᴀᴅᴏ"
     cherry_grove:
@@ -331,7 +331,7 @@ titles:
     sunflower_plains:
       mensagem: "&fVocê está nas &fPlanícies de Girassóis"
     deep_dark:
-      mensagem: "&fᴇsᴄᴜʀɪᴅÃᴏ ᴘʀᴏғᴜɴᴅᴀ"
+      mensagem: "&fᴇsᴄᴜʀɪᴅᴀᴏ ᴘʀᴏғᴜɴᴅᴀ"
     dripstone_caves:
       mensagem: "&fᴄᴀᴠᴇʀɴᴀs ᴅᴇ ᴅʀɪᴘsᴛᴏɴᴇ"
     lush_caves:
@@ -351,7 +351,7 @@ titles:
     end_highlands:
       mensagem: "&fᴛᴇʀʀᴀs ᴀʟᴛᴀs ᴅᴏ ғɪᴍ"
     end_midlands:
-      mensagem: "&fᴛᴇʀʀᴀs ᴍÉᴅɪᴀs ᴅᴏ ғɪᴍ"
+      mensagem: "&fᴛᴇʀʀᴀs ᴍᴇᴅɪᴀs ᴅᴏ ғɪᴍ"
     small_end_islands:
       mensagem: "&fᴘᴇǫᴜᴇɴᴀs ɪʟʜᴀs ᴅᴏ ғɪᴍ"
     end_barrens:
@@ -367,7 +367,7 @@ titles:
     old_growth_birch_forest:
       mensagem: "&fVocê está na &fFloresta de Bétulas Antigas"
     pale_garden:
-      mensagem: "&fᴊᴀʀᴅɪᴍ ᴘÁʟɪᴅᴏ"
+      mensagem: "&fᴊᴀʀᴅɪᴍ ᴘᴀʟɪᴅᴏ"
     savanna_plateau:
       mensagem: "&fVocê está no &fPlanalto de Savanna"
     snowy_beach:
