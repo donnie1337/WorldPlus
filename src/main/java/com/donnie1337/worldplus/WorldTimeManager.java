@@ -1,7 +1,6 @@
 package com.donnie1337.worldplus;
 
 import org.bukkit.Bukkit;
-import org.bukkit.GameRule;
 import org.bukkit.World;
 import org.bukkit.scheduler.BukkitTask;
 
@@ -47,7 +46,7 @@ public final class WorldTimeManager {
             WorldPlus worldPlus = plugin;
             World world = worldPlus.getWorldById(id);
             if (world != null) {
-                world.setGameRule(GameRule.DO_DAYLIGHT_CYCLE, true);
+                setDaylightCycle(world, true);
             }
         }
 
@@ -56,7 +55,7 @@ public final class WorldTimeManager {
 
     public void apply(World world, String id) {
         if (world == null || !isManaged(id)) return;
-        world.setGameRule(GameRule.DO_DAYLIGHT_CYCLE, false);
+        setDaylightCycle(world, false);
     }
 
     private void update(String id) {
@@ -93,6 +92,18 @@ public final class WorldTimeManager {
         }
 
         accumulators.put(id, accumulator);
+    }
+
+    private void setDaylightCycle(World world, boolean enabled) {
+        try {
+            var method = World.class.getMethod("setGameRuleValue", String.class, String.class);
+            method.invoke(world, "doDaylightCycle", Boolean.toString(enabled));
+            return;
+        } catch (ReflectiveOperationException ignored) {
+        }
+
+        Bukkit.dispatchCommand(Bukkit.getConsoleSender(),
+                "gamerule doDaylightCycle " + Boolean.toString(enabled));
     }
 
     private boolean isManaged(String id) {
