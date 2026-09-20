@@ -337,9 +337,9 @@ titles:
     lush_caves:
       mensagem: "&fVocê está nas &fCavernas Exuberantes"
     nether_wastes:
-      mensagem: "&fVocê está nas &fDunas do Nether"
+      mensagem: "&fVocê está no &fErmo do Nether"
     soul_sand_valley:
-      mensagem: "&fVocê está no &fVale das Areias das Almas"
+      mensagem: "&fVocê está no &fVale das Almas"
     crimson_forest:
       mensagem: "&fVocê está na &fFloresta Carmesim"
     warped_forest:
@@ -347,15 +347,15 @@ titles:
     basalt_deltas:
       mensagem: "&fVocê está nos &fDeltas de Basalto"
     the_end:
-      mensagem: "&fVocê está no &fO End"
+      mensagem: "&fVocê está no &fFim"
     end_highlands:
-      mensagem: "&fVocê está nas &fTerras Altas do End"
+      mensagem: "&fVocê está nas &fTerras Altas do Fim"
     end_midlands:
-      mensagem: "&fVocê está nas &fTerras Médias do End"
+      mensagem: "&fVocê está nas &fTerras Médias do Fim"
     small_end_islands:
-      mensagem: "&fVocê está nas &fPequenas Ilhas do End"
+      mensagem: "&fVocê está nas &fPequenas Ilhas do Fim"
     end_barrens:
-      mensagem: "&fVocê está nos &fErmos do End"
+      mensagem: "&fVocê está nos &fErmos do Fim"
     deep_cold_ocean:
       mensagem: "&fVocê está no &fOceano Profundo Frio"
     deep_frozen_ocean:
