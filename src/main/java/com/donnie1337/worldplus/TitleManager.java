@@ -22,6 +22,7 @@ public final class TitleManager implements Listener {
     private final Map<UUID, String> lastBiomes = new HashMap<>();
     private final Map<UUID, Boolean> firstRtpTitleShown = new HashMap<>();
     private final Map<UUID, Boolean> rtpTitleActive = new HashMap<>();
+    private final Map<UUID, String> lastShownImportantBiome = new HashMap<>();
     private static final Set<String> IMPORTANT_BIOMES = Set.of(
             "plains", "sunflower_plains", "forest", "flower_forest", "dark_forest",
             "taiga", "snowy_plains", "cherry_grove", "jungle", "bamboo_jungle",
@@ -74,6 +75,8 @@ public final class TitleManager implements Listener {
         if (key.equals(lastBiomes.get(uuid))) return;
         lastBiomes.put(uuid, key);
         if (!IMPORTANT_BIOMES.contains(biome.getKey().getKey())) return;
+        if (key.equals(lastShownImportantBiome.get(uuid))) return;
+        lastShownImportantBiome.put(uuid, key);
         sendBiomeTitle(player, biome);
     }
 
@@ -148,6 +151,7 @@ public final class TitleManager implements Listener {
     @EventHandler
     public void onJoin(PlayerJoinEvent event) {
         lastBiomes.remove(event.getPlayer().getUniqueId());
+        lastShownImportantBiome.remove(event.getPlayer().getUniqueId());
     }
 
     @EventHandler
@@ -168,6 +172,7 @@ public final class TitleManager implements Listener {
     public void onQuit(PlayerQuitEvent event) {
         UUID uuid = event.getPlayer().getUniqueId();
         lastBiomes.remove(uuid);
+        lastShownImportantBiome.remove(uuid);
         firstRtpTitleShown.remove(uuid);
         rtpTitleActive.remove(uuid);
     }
