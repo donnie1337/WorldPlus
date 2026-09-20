@@ -65,8 +65,6 @@ public final class WorldTimeManager {
         World world = plugin.getWorldById(id);
         if (world == null) return;
 
-        world.setGameRule(GameRule.DO_DAYLIGHT_CYCLE, false);
-
         long time = Math.floorMod(world.getTime(), 24_000L);
         long phaseGameTicks;
         long phaseRealTicks;
