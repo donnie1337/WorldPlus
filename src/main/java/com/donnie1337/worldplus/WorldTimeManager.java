@@ -96,14 +96,16 @@ public final class WorldTimeManager {
 
     private void setDaylightCycle(World world, boolean enabled) {
         try {
-            var method = World.class.getMethod("setGameRuleValue", String.class, String.class);
-            method.invoke(world, "doDaylightCycle", Boolean.toString(enabled));
-            return;
-        } catch (ReflectiveOperationException ignored) {
-        }
+            var getByName = org.bukkit.GameRule.class.getMethod("getByName", String.class);
+            Object rule = getByName.invoke(null, "doDaylightCycle");
+            if (rule == null) return;
 
-        Bukkit.dispatchCommand(Bukkit.getConsoleSender(),
-                "gamerule doDaylightCycle " + Boolean.toString(enabled));
+            var setGameRule = World.class.getMethod("setGameRule", org.bukkit.GameRule.class, Object.class);
+            setGameRule.invoke(world, rule, enabled);
+        } catch (ReflectiveOperationException ignored) {
+            // A API do servidor pode não expor esta gamerule; nesse caso,
+            // o WorldPlus mantém o comportamento padrão do mundo.
+        }
     }
 
     private boolean isManaged(String id) {
