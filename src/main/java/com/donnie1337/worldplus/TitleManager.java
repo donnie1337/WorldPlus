@@ -11,6 +11,8 @@ import org.bukkit.event.player.PlayerMoveEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 
 import java.util.HashMap;
+import java.util.Set;
+import java.util.HashSet;
 import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
@@ -20,6 +22,14 @@ public final class TitleManager implements Listener {
     private final Map<UUID, String> lastBiomes = new HashMap<>();
     private final Map<UUID, Boolean> firstRtpTitleShown = new HashMap<>();
     private final Map<UUID, Boolean> rtpTitleActive = new HashMap<>();
+    private static final Set<String> IMPORTANT_BIOMES = Set.of(
+            "plains", "sunflower_plains", "forest", "flower_forest", "dark_forest",
+            "taiga", "snowy_plains", "cherry_grove", "jungle", "bamboo_jungle",
+            "swamp", "mangrove_swamp", "savanna", "desert", "badlands",
+            "meadow", "windswept_hills", "snowy_slopes", "ocean", "mushroom_fields",
+            "lush_caves", "dripstone_caves", "deep_dark", "pale_garden",
+            "ice_spikes", "frozen_ocean", "warm_ocean", "deep_ocean"
+    );
 
     public TitleManager(WorldPlus plugin) {
         this.plugin = plugin;
@@ -61,6 +71,7 @@ public final class TitleManager implements Listener {
 
         if (key.equals(lastBiomes.get(uuid))) return;
         lastBiomes.put(uuid, key);
+        if (!IMPORTANT_BIOMES.contains(biome.getKey().getKey())) return;
         sendBiomeTitle(player, biome);
     }
 
