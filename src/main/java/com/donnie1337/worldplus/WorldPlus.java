@@ -25,6 +25,7 @@ public final class WorldPlus extends JavaPlugin {
     private final Map<String, WorldSettings> worlds = new LinkedHashMap<>();
     private TitleManager titleManager;
     private RtpManager rtpManager;
+    private WorldTimeManager worldTimeManager;
 
     @Override
     public void onLoad() {
@@ -43,6 +44,10 @@ public final class WorldPlus extends JavaPlugin {
 
     @Override
     public void onDisable() {
+        if (worldTimeManager != null) {
+            worldTimeManager.stop();
+            worldTimeManager = null;
+        }
         if (rtpManager != null) {
             rtpManager.shutdown();
             rtpManager = null;
@@ -60,6 +65,15 @@ public final class WorldPlus extends JavaPlugin {
         if (getConfig().getBoolean("configuracao.criar-mundos-automaticamente", true)) {
             for (WorldSettings settings : worlds.values()) createOrLoadWorld(settings);
         }
+        worldTimeManager = new WorldTimeManager(this);
+        for (String id : new String[]{"overworld", "mineracao"}) {
+            WorldSettings settings = getSettings(id);
+            if (settings != null) {
+                World world = Bukkit.getWorld(settings.name());
+                if (world != null) worldTimeManager.apply(world, id);
+            }
+        }
+        worldTimeManager.start();
         titleManager = new TitleManager(this);
         rtpManager = new RtpManager(this);
         RtpCommand rtpCommand = new RtpCommand(this, rtpManager);
@@ -124,6 +138,11 @@ public final class WorldPlus extends JavaPlugin {
     }
 
     public Map<String, WorldSettings> getWorlds() { return worlds; }
+
+    public World getWorldById(String id) {
+        WorldSettings settings = getSettings(id);
+        return settings == null ? null : Bukkit.getWorld(settings.name());
+    }
 
     public TitleManager getTitleManager() {
         return titleManager;
@@ -231,6 +250,7 @@ public final class WorldPlus extends JavaPlugin {
             world.setSpawnLocation(settings.spawnX(), settings.spawnY(), settings.spawnZ(), settings.spawnYaw());
         }
         world.setGameRule(GameRule.KEEP_INVENTORY, settings.keepInventory());
+        if (worldTimeManager != null) worldTimeManager.apply(world, settings.id());
     }
 
     public void setSpawn(WorldSettings settings, World world, org.bukkit.Location location) {
