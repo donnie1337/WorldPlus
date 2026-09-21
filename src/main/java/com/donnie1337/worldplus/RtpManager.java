@@ -4,6 +4,7 @@ import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.Chunk;
 import org.bukkit.ChunkSnapshot;
+import org.bukkit.block.Block;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.World;
@@ -114,13 +115,14 @@ public final class RtpManager implements Listener {
         findChunk(player, targetWorld, settings, attempts, 0, location -> {
             // Se todas as áreas aleatórias forem inválidas, use um destino
             // seguro próximo ao spawn em vez de deixar o jogador sem RTP.
-            Location target = location != null ? location : findSafeSpawn(targetWorld);
-            if (target == null) {
+            Location resolvedTarget = location != null ? location : findSafeSpawn(targetWorld);
+            if (resolvedTarget == null) {
                 // Última garantia: todo mundo carregado possui uma coluna de
                 // superfície no spawn. Não cancele o RTP por uma validação
                 // excessivamente restritiva.
-                target = emergencySpawn(targetWorld);
+                resolvedTarget = emergencySpawn(targetWorld);
             }
+            final Location target = resolvedTarget;
 
             Bukkit.getScheduler().runTask(plugin, () -> {
                 if (!player.isOnline() || !pendingWorlds.containsKey(player.getUniqueId())) {
@@ -426,20 +428,23 @@ public final class RtpManager implements Listener {
     }
 
     private Location findSafeAt(World world, int x, int z) {
-        int topY = world.getHighestBlockYAt(x, z);
-        int minY = Math.max(world.getMinHeight(), topY - 80);
-
-        for (int y = topY; y >= minY; y--) {
-            Material floor = world.getBlockAt(x, y, z).getType();
-            Material feet = world.getBlockAt(x, y + 1, z).getType();
-            Material head = world.getBlockAt(x, y + 2, z).getType();
-
-            if (floor == Material.BEDROCK || isUnsafe(floor) || !floor.isSolid()) continue;
-            if (!isPassable(feet) || !isPassable(head)) continue;
-
-            return new Location(world, x + 0.5D, y + 1.0D, z + 0.5D);
+        // Mesmo método simples e confiável adotado pelos RTPs de referência:
+        // use a superfície mais alta da coordenada sorteada e rejeite apenas
+        // materiais realmente perigosos. Como é a maior coluna, não há bloco
+        // sólido acima da posição do jogador.
+        Block ground = world.getHighestBlockAt(x, z);
+        if (!ground.getType().isSolid()) {
+            ground = ground.getRelative(org.bukkit.block.BlockFace.DOWN);
         }
-        return null;
+
+        Material floor = ground.getType();
+        if (ground.getY() <= world.getMinHeight()
+                || floor == Material.BEDROCK
+                || isUnsafe(floor)) {
+            return null;
+        }
+
+        return new Location(world, x + 0.5D, ground.getY() + 1.0D, z + 0.5D);
     }
 
     private void removeTicket(World world, int chunkX, int chunkZ) {
