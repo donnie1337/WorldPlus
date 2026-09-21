@@ -112,7 +112,10 @@ public final class RtpManager implements Listener {
         int attempts = Math.max(1, plugin.getConfig().getInt("rtp.geral.max-tentativas", 32));
 
         findChunk(player, targetWorld, settings, attempts, 0, location -> {
-            if (location == null) {
+            // Se todas as áreas aleatórias forem inválidas, use um destino
+            // seguro próximo ao spawn em vez de deixar o jogador sem RTP.
+            Location target = location != null ? location : findSafeSpawn(targetWorld);
+            if (target == null) {
                 message(player, "local-nao-encontrado",
                         "&cNão foi possível encontrar um local seguro para o RTP.", null, null);
                 clear(player);
@@ -126,12 +129,12 @@ public final class RtpManager implements Listener {
                 }
 
                 boolean teleported = player.teleport(
-                        location,
+                        target,
                         org.bukkit.event.player.PlayerTeleportEvent.TeleportCause.PLUGIN
                 );
 
                 if (!teleported) {
-                    removeTicket(location.getWorld(), location.getChunk().getX(), location.getChunk().getZ());
+                    removeTicket(target.getWorld(), target.getChunk().getX(), target.getChunk().getZ());
                     cooldowns.remove(player.getUniqueId());
                     message(player, "local-nao-encontrado",
                             "&cNão foi possível concluir o teleporte para o local preparado.", null, null);
@@ -139,9 +142,9 @@ public final class RtpManager implements Listener {
                     return;
                 }
 
-                removeTicket(location.getWorld(), location.getChunk().getX(), location.getChunk().getZ());
+                removeTicket(target.getWorld(), target.getChunk().getX(), target.getChunk().getZ());
 
-                completeTeleport(player, settings, location);
+                completeTeleport(player, settings, target);
             });
         });
     }
@@ -358,37 +361,77 @@ public final class RtpManager implements Listener {
     }
 
     private void inspectLoadedChunk(ChunkRequest request, Chunk chunk) {
-        // Não precisamos do mapa de "altura máxima por coluna" nem de biomas
-        // para encontrar um destino seguro. Capturar esses dados no thread
-        // principal aumenta o custo justamente no caminho crítico do RTP.
-        // O snapshot básico é thread-safe e será analisado fora do servidor.
-        ChunkSnapshot snapshot = chunk.getChunkSnapshot(false, false, false);
-        int minHeight = request.world().getMinHeight();
-        int maxHeight = request.world().getMaxHeight();
+        // A análise passa a usar os blocos reais já carregados no servidor.
+        // Em alguns cenários, o snapshot retornava uma coluna inválida após a
+        // geração, fazendo o RTP descartar chunks que tinham solo seguro.
+        Location safe = findSafeSurface(request.world(), chunk);
 
-        Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
-            Location safe = findSafeColumn(request.world(), snapshot, minHeight, maxHeight);
+        if (!request.player().isOnline()) {
+            removeTicket(request.world(), request.key().x(), request.key().z());
+            request.callback().accept(null);
+            processChunkQueue();
+            return;
+        }
 
-            Bukkit.getScheduler().runTask(plugin, () -> {
-                if (!request.player().isOnline()) {
-                    removeTicket(request.world(), request.key().x(), request.key().z());
-                    request.callback().accept(null);
-                    processChunkQueue();
-                    return;
+        if (safe != null) {
+            request.callback().accept(safe);
+            processChunkQueue();
+            return;
+        }
+
+        removeTicket(request.world(), request.key().x(), request.key().z());
+        retry(request.player(), request.world(), request.settings(),
+                request.maxAttempts(), request.attempt(), request.callback());
+        processChunkQueue();
+    }
+
+    private Location findSafeSurface(World world, Chunk chunk) {
+        ThreadLocalRandom random = ThreadLocalRandom.current();
+        int start = random.nextInt(256);
+        int baseX = chunk.getX() << 4;
+        int baseZ = chunk.getZ() << 4;
+
+        for (int offset = 0; offset < 256; offset++) {
+            int index = (start + offset) & 255;
+            Location safe = findSafeAt(world, baseX + (index & 15), baseZ + (index >> 4));
+            if (safe != null) return safe;
+        }
+        return null;
+    }
+
+    private Location findSafeSpawn(World world) {
+        Location spawn = world.getSpawnLocation();
+        int baseX = spawn.getBlockX();
+        int baseZ = spawn.getBlockZ();
+
+        for (int distance = 0; distance <= 8; distance++) {
+            for (int x = baseX - distance; x <= baseX + distance; x++) {
+                for (int z = baseZ - distance; z <= baseZ + distance; z++) {
+                    if (distance != 0 && x != baseX - distance && x != baseX + distance
+                            && z != baseZ - distance && z != baseZ + distance) continue;
+                    Location safe = findSafeAt(world, x, z);
+                    if (safe != null) return safe;
                 }
+            }
+        }
+        return null;
+    }
 
-                if (safe != null) {
-                    request.callback().accept(safe);
-                    processChunkQueue();
-                    return;
-                }
+    private Location findSafeAt(World world, int x, int z) {
+        int topY = world.getHighestBlockYAt(x, z);
+        int minY = Math.max(world.getMinHeight(), topY - 80);
 
-                removeTicket(request.world(), request.key().x(), request.key().z());
-                retry(request.player(), request.world(), request.settings(),
-                        request.maxAttempts(), request.attempt(), request.callback());
-                processChunkQueue();
-            });
-        });
+        for (int y = topY; y >= minY; y--) {
+            Material floor = world.getBlockAt(x, y, z).getType();
+            Material feet = world.getBlockAt(x, y + 1, z).getType();
+            Material head = world.getBlockAt(x, y + 2, z).getType();
+
+            if (floor == Material.BEDROCK || isUnsafe(floor) || !floor.isSolid()) continue;
+            if (!isPassable(feet) || !isPassable(head)) continue;
+
+            return new Location(world, x + 0.5D, y + 1.0D, z + 0.5D);
+        }
+        return null;
     }
 
     private void removeTicket(World world, int chunkX, int chunkZ) {
@@ -493,9 +536,21 @@ public final class RtpManager implements Listener {
     }
 
     private boolean isPassable(Material material) {
-        // Vegetação, flores e similares não ocupam espaço de colisão e não
-        // devem invalidar uma coluna segura. Líquidos continuam bloqueados.
-        return !isLiquid(material) && !material.isSolid();
+        // Vegetação não bloqueia a chegada do jogador; líquidos e perigos sim.
+        return !isUnsafe(material) && !material.isSolid();
+    }
+
+    private boolean isUnsafe(Material material) {
+        return isLiquid(material)
+                || material == Material.CACTUS
+                || material == Material.FIRE
+                || material == Material.SOUL_FIRE
+                || material == Material.MAGMA_BLOCK
+                || material == Material.CAMPFIRE
+                || material == Material.SOUL_CAMPFIRE
+                || material == Material.POWDER_SNOW
+                || material == Material.SWEET_BERRY_BUSH
+                || material == Material.POINTED_DRIPSTONE;
     }
 
     private boolean isLiquid(Material material) {
