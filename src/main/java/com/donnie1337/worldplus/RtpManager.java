@@ -90,6 +90,13 @@ public final class RtpManager implements Listener {
                 debug(player, "Jogador estava em veículo; removendo antes do teleporte.");
                 player.leaveVehicle();
             }
+            int passengerCount = player.getPassengers().size();
+            if (passengerCount > 0) {
+                // O Bukkit recusa o teleporte antes de disparar o evento quando
+                // a entidade ainda está transportando passageiros.
+                debug(player, "Jogador tinha " + passengerCount + " passageiro(s); ejetando antes do teleporte.");
+                player.eject();
+            }
             debug(player, "Estado antes do teleporte: dead=" + player.isDead()
                     + ", veículos-passageiros=" + player.getPassengers().size() + ".");
             teleportTargets.put(player.getUniqueId(), safe);
