@@ -113,7 +113,7 @@ rtp:
     tamanho: 27
 
     # Título do menu.
-    titulo: "&8&lRTP &8• &fEscolha o mundo"
+    titulo: "&8Teleporte Aleatório"
 
     # Preenchimento dos espaços vazios.
     preenchimento:
@@ -125,55 +125,51 @@ rtp:
     # Placeholders disponíveis na lore:
     # {mundo} = nome exibido do mundo
     # {id} = identificador do mundo
-    # {raio} = raio máximo configurado para o RTP
+    # {tamanho} = tamanho total do mundo
     mundos:
       overworld:
         slot: 10
         material: "GRASS_BLOCK"
-        nome: "&a&lMundo Normal"
+        nome: "&aMundo Normal"
         lore:
-          - "&7&l• &fTeleportação aleatória"
-          - "&8"
+          - ""
           - "&7Mundo: &f{mundo}"
-          - "&7Raio de exploração: &b{raio} blocos"
-          - "&8"
-          - "&a&lClique para teleportar"
+          - "&7Tamanho do mundo: &f{tamanho} blocos"
+          - ""
+          - "&8Clique para se teleportar."
 
       mineracao:
         slot: 12
         material: "DIAMOND_PICKAXE"
-        nome: "&e&lMineração"
+        nome: "&eMineração"
         lore:
-          - "&7&l• &fTeleportação aleatória"
-          - "&8"
+          - ""
           - "&7Mundo: &f{mundo}"
-          - "&7Raio de exploração: &b{raio} blocos"
-          - "&8"
-          - "&a&lClique para teleportar"
+          - "&7Raio de exploração: &f{raio} blocos"
+          - ""
+          - "&8Clique para se teleportar."
 
       nether:
         slot: 14
         material: "NETHERRACK"
-        nome: "&c&lNether"
+        nome: "&cNether"
         lore:
-          - "&7&l• &fTeleportação aleatória"
-          - "&8"
+          - ""
           - "&7Mundo: &f{mundo}"
-          - "&7Raio de exploração: &b{raio} blocos"
-          - "&8"
-          - "&a&lClique para teleportar"
+          - "&7Raio de exploração: &f{raio} blocos"
+          - ""
+          - "&8Clique para se teleportar."
 
       end:
         slot: 16
         material: "END_STONE"
-        nome: "&5&lThe End"
+        nome: "&5The End"
         lore:
-          - "&7&l• &fTeleportação aleatória"
-          - "&8"
+          - ""
           - "&7Mundo: &f{mundo}"
-          - "&7Raio de exploração: &b{raio} blocos"
-          - "&8"
-          - "&a&lClique para teleportar"
+          - "&7Raio de exploração: &f{raio} blocos"
+          - ""
+          - "&8Clique para se teleportar."
 
   mundos:
     overworld:

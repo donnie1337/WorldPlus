@@ -39,7 +39,7 @@ public final class RtpCommand implements CommandExecutor, TabCompleter, Listener
         size = (size / 9) * 9;
 
         String title = plugin.getConfig().getString(
-                "rtp.gui.titulo", "&8&lRTP &8• &fEscolha o mundo"
+                "rtp.gui.titulo", "&8Teleporte Aleatório"
         );
         Inventory inventory = Bukkit.createInventory(null, size, color(title));
 
@@ -86,11 +86,11 @@ public final class RtpCommand implements CommandExecutor, TabCompleter, Listener
             if (meta == null) continue;
 
             String defaultName = switch (settings.environment()) {
-                case NETHER -> "&c&lNether";
-                case THE_END -> "&5&lThe End";
+                case NETHER -> "&cNether";
+                case THE_END -> "&5The End";
                 default -> settings.id().equalsIgnoreCase("mineracao")
-                        ? "&e&lMineração"
-                        : "&a&lMundo Normal";
+                        ? "&eMineração"
+                        : "&aMundo Normal";
             };
 
             meta.setDisplayName(color(plugin.getConfig().getString(
@@ -101,20 +101,14 @@ public final class RtpCommand implements CommandExecutor, TabCompleter, Listener
                     worldKey, PersistentDataType.STRING, settings.id()
             );
 
-            double raio = plugin.getConfig().getDouble(
-                    "rtp.mundos." + settings.id() + ".raio-maximo",
-                    settings.size() / 2
-            );
-
             List<String> lore = plugin.getConfig().getStringList(path + ".lore");
             if (lore.isEmpty()) {
                 lore = List.of(
-                        "&7&l• &fTeleportação aleatória",
-                        "&8",
+                        "",
                         "&7Mundo: &f{mundo}",
-                        "&7Raio de exploração: &b{raio} blocos",
-                        "&8",
-                        "&a&lClique para teleportar"
+                        "&7Tamanho do mundo: &f{tamanho} blocos",
+                        "",
+                        "&8Clique para se teleportar."
                 );
             }
 
@@ -122,7 +116,7 @@ public final class RtpCommand implements CommandExecutor, TabCompleter, Listener
                     .map(line -> line
                             .replace("{mundo}", displayWorldName(settings))
                             .replace("{id}", settings.id())
-                            .replace("{raio}", format(raio)))
+                            .replace("{tamanho}", format(settings.size()) + " x " + format(settings.size())))
                     .map(this::color)
                     .toList();
 
