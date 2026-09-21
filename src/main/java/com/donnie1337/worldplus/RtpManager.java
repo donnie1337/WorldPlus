@@ -116,10 +116,10 @@ public final class RtpManager implements Listener {
             // seguro próximo ao spawn em vez de deixar o jogador sem RTP.
             Location target = location != null ? location : findSafeSpawn(targetWorld);
             if (target == null) {
-                message(player, "local-nao-encontrado",
-                        "&cNão foi possível encontrar um local seguro para o RTP.", null, null);
-                clear(player);
-                return;
+                // Última garantia: todo mundo carregado possui uma coluna de
+                // superfície no spawn. Não cancele o RTP por uma validação
+                // excessivamente restritiva.
+                target = emergencySpawn(targetWorld);
             }
 
             Bukkit.getScheduler().runTask(plugin, () -> {
@@ -415,6 +415,14 @@ public final class RtpManager implements Listener {
             }
         }
         return null;
+    }
+
+    private Location emergencySpawn(World world) {
+        Location spawn = world.getSpawnLocation();
+        int x = spawn.getBlockX();
+        int z = spawn.getBlockZ();
+        int y = world.getHighestBlockYAt(x, z);
+        return new Location(world, x + 0.5D, y + 1.0D, z + 0.5D);
     }
 
     private Location findSafeAt(World world, int x, int z) {
