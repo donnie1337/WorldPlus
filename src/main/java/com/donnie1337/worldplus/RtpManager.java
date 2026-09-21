@@ -43,46 +43,57 @@ public final class RtpManager implements Listener {
         if (cooldown > 0L) { msg(player, "cooldown", "&cAguarde &f{tempo} segundos &cpara usar o teleporte novamente.", "tempo", Long.toString(cooldown)); return; }
 
         pending.put(player.getUniqueId(), settings.id());
+        debug(player, "Início: mundo selecionado=" + settings.id() + " (" + settings.name() + ").");
         if (plugin.getTitleManager() != null) plugin.getTitleManager().showRtpLoading(player, 10);
         long delay = Math.max(0L, plugin.getConfig().getLong("rtp.geral.atraso-segundos", 3L));
         Bukkit.getScheduler().runTaskLater(plugin, () -> {
             if (!player.isOnline() || !pending.containsKey(player.getUniqueId())) return;
             World world = Bukkit.getWorld(settings.name());
             if (world == null) world = plugin.createOrLoadWorld(settings);
-            if (world == null) { msg(player, "erro", "&cNão foi possível carregar o mundo de RTP.", null, null); clear(player); return; }
-            find(player, settings, world, Math.max(1, plugin.getConfig().getInt("rtp.geral.max-tentativas", 32)));
+            if (world == null) { debug(player, "Falha: mundo não pôde ser carregado."); msg(player, "erro", "&cNão foi possível carregar o mundo de RTP.", null, null); clear(player); return; }
+            int attempts = Math.max(1, plugin.getConfig().getInt("rtp.geral.max-tentativas", 32));
+            debug(player, "Mundo carregado. Iniciando busca com " + attempts + " tentativas.");
+            find(player, settings, world, attempts);
         }, delay * 20L);
     }
 
     private void find(Player player, WorldSettings settings, World world, int remaining) {
         if (!player.isOnline() || !pending.containsKey(player.getUniqueId())) { clear(player); return; }
-        if (remaining <= 0) { msg(player, "local-nao-encontrado", "&cNão foi possível encontrar um local seguro para o RTP.", null, null); clear(player); return; }
+        if (remaining <= 0) { debug(player, "Fim: todas as tentativas foram consumidas."); msg(player, "local-nao-encontrado", "&cNão foi possível encontrar um local seguro para o RTP.", null, null); clear(player); return; }
 
         Location point = randomPoint(world, settings);
-        if (point == null) { retry(player, settings, world, remaining); return; }
+        if (point == null) { debug(player, "Coordenada sorteada fora da borda; sorteando novamente."); retry(player, settings, world, remaining); return; }
+        debug(player, "Tentativa " + remaining + ": coordenada X=" + point.getBlockX() + ", Z=" + point.getBlockZ()
+                + ", chunk=" + (point.getBlockX() >> 4) + "," + (point.getBlockZ() >> 4) + ".");
 
         // Carregamento assíncrono no Paper; em Spigot puro o fallback usa a
         // API síncrona uma única vez, sem iniciar novas cargas se o teleporte
         // for recusado por outro sistema.
+        debug(player, "Solicitando carregamento da chunk.");
         loadChunk(world, point.getBlockX() >> 4, point.getBlockZ() >> 4, chunk -> {
             if (!player.isOnline() || !pending.containsKey(player.getUniqueId())) {
                 clear(player);
                 return;
             }
 
+            debug(player, "Chunk carregada: " + chunk.getX() + "," + chunk.getZ() + ".");
             Location safe = safeAt(world, chunk, point.getBlockX(), point.getBlockZ(), settings);
             if (safe == null) {
+                debug(player, "Coordenada rejeitada: sem superfície segura.");
                 retry(player, settings, world, remaining);
                 return;
             }
 
+            debug(player, "Destino seguro: X=" + safe.getBlockX() + ", Y=" + safe.getBlockY() + ", Z=" + safe.getBlockZ() + ".");
             if (!player.teleport(safe, PlayerTeleportEvent.TeleportCause.PLUGIN)) {
+                debug(player, "Falha: Player#teleport retornou false.");
                 msg(player, "teleporte-cancelado",
                         "&cO teleporte foi bloqueado por outro sistema do servidor.", null, null);
                 clear(player);
                 return;
             }
 
+            debug(player, "Sucesso: jogador teleportado.");
             completeTeleport(player, settings, safe);
         }, () -> retry(player, settings, world, remaining));
     }
@@ -90,6 +101,7 @@ public final class RtpManager implements Listener {
     private void loadChunk(World world, int chunkX, int chunkZ,
                            Consumer<Chunk> loaded, Runnable failed) {
         if (world.isChunkLoaded(chunkX, chunkZ)) {
+            plugin.getLogger().info("[RTP DEBUG] Chunk já estava carregada: " + world.getName() + " " + chunkX + "," + chunkZ + ".");
             loaded.accept(world.getChunkAt(chunkX, chunkZ));
             return;
         }
@@ -99,8 +111,10 @@ public final class RtpManager implements Listener {
                     int.class, int.class, boolean.class);
             Object result = method.invoke(world, chunkX, chunkZ, true);
             if (result instanceof CompletableFuture<?> future) {
+                plugin.getLogger().info("[RTP DEBUG] Carregamento assíncrono solicitado: " + world.getName() + " " + chunkX + "," + chunkZ + ".");
                 future.whenComplete((chunk, error) -> Bukkit.getScheduler().runTask(plugin, () -> {
                     if (error != null || !(chunk instanceof Chunk loadedChunk)) {
+                        plugin.getLogger().warning("[RTP DEBUG] Falha no carregamento assíncrono da chunk: " + world.getName() + " " + chunkX + "," + chunkZ + ".");
                         failed.run();
                         return;
                     }
@@ -112,6 +126,8 @@ public final class RtpManager implements Listener {
             // Spigot não disponibiliza a API assíncrona de chunks.
         }
 
+        plugin.getLogger().info("[RTP DEBUG] Servidor sem API assíncrona; carregando chunk no thread principal: "
+                + world.getName() + " " + chunkX + "," + chunkZ + ".");
         loaded.accept(world.getChunkAt(chunkX, chunkZ, true));
     }
 
@@ -165,7 +181,13 @@ public final class RtpManager implements Listener {
         // chunk carregada. Só rejeitamos água, lava, ar e perigos explícitos.
         Block highest = world.getHighestBlockAt(x, z);
         Material ground = highest.getType();
-        if (ground.isAir() || dangerous(ground)) return null;
+        if (ground.isAir() || dangerous(ground)) {
+            plugin.getLogger().info("[RTP DEBUG] Superfície rejeitada em " + world.getName() + " X=" + x + " Z=" + z
+                    + ": " + ground + ".");
+            return null;
+        }
+        plugin.getLogger().info("[RTP DEBUG] Superfície aceita em " + world.getName() + " X=" + x + " Y="
+                + highest.getY() + " Z=" + z + ": " + ground + ".");
         return new Location(world, x + .5D, highest.getY() + 1.0D, z + .5D);
     }
 
@@ -201,6 +223,12 @@ public final class RtpManager implements Listener {
     @EventHandler public void onQuit(PlayerQuitEvent e) { clear(e.getPlayer()); cooldowns.remove(e.getPlayer().getUniqueId()); }
     public void shutdown() { pending.clear(); }
     private void clear(Player p) { pending.remove(p.getUniqueId()); if (plugin.getTitleManager() != null) plugin.getTitleManager().endRtpTitle(p); }
+    private void debug(Player player, String message) {
+        if (plugin.getConfig().getBoolean("rtp.debug", true)) {
+            plugin.getLogger().info("[RTP DEBUG] " + player.getName() + " • " + message);
+        }
+    }
+
     private void msg(Player p, String key, String fallback, String placeholder, String value) {
         String text = plugin.getConfig().getString("rtp.mensagens." + key, plugin.getConfig().getString("mensagens." + key, fallback));
         if (placeholder != null) text = text.replace("{" + placeholder + "}", value);
