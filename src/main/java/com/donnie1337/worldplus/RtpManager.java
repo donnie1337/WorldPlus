@@ -400,11 +400,14 @@ public final class RtpManager implements Listener {
         ThreadLocalRandom random = ThreadLocalRandom.current();
         boolean nether = world.getEnvironment() == World.Environment.NETHER;
 
-        int columnsToCheck = nether ? 48 : 64;
+        // Analisa todas as colunas da chunk. A versão anterior examinava
+        // apenas uma em cada quatro, o que podia rejeitar chunks inteiras
+        // mesmo tendo terreno seguro, especialmente em florestas.
+        int columnsToCheck = 256;
         int start = random.nextInt(256);
 
         for (int offset = 0; offset < columnsToCheck; offset++) {
-            int index = (start + offset * 4) & 255;
+            int index = (start + offset) & 255;
             int localX = index & 15;
             int localZ = index >> 4;
 
@@ -487,6 +490,12 @@ public final class RtpManager implements Listener {
         }
 
         return Integer.MIN_VALUE;
+    }
+
+    private boolean isPassable(Material material) {
+        // Vegetação, flores e similares não ocupam espaço de colisão e não
+        // devem invalidar uma coluna segura. Líquidos continuam bloqueados.
+        return !isLiquid(material) && !material.isSolid();
     }
 
     private boolean isLiquid(Material material) {

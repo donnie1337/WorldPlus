@@ -43,21 +43,6 @@ public final class RtpCommand implements CommandExecutor, TabCompleter, Listener
         );
         Inventory inventory = Bukkit.createInventory(null, size, color(title));
 
-        String fillerMaterial = plugin.getConfig().getString("rtp.gui.preenchimento.material", "GRAY_STAINED_GLASS_PANE");
-        String fillerName = plugin.getConfig().getString("rtp.gui.preenchimento.nome", " ");
-        if (plugin.getConfig().getBoolean("rtp.gui.preenchimento.habilitado", true)) {
-            Material filler = material(fillerMaterial, Material.GRAY_STAINED_GLASS_PANE);
-            ItemStack fillerItem = new ItemStack(filler);
-            ItemMeta fillerMeta = fillerItem.getItemMeta();
-            if (fillerMeta != null) {
-                fillerMeta.setDisplayName(color(fillerName));
-                fillerItem.setItemMeta(fillerMeta);
-            }
-            for (int slot = 0; slot < size; slot++) {
-                inventory.setItem(slot, fillerItem.clone());
-            }
-        }
-
         for (WorldSettings settings : plugin.getWorlds().values()) {
             String path = "rtp.gui.mundos." + settings.id();
             if (!plugin.getConfig().getBoolean(

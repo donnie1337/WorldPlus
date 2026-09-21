@@ -115,12 +115,6 @@ rtp:
     # Título do menu.
     titulo: "&8Teleporte Aleatório"
 
-    # Preenchimento dos espaços vazios.
-    preenchimento:
-      habilitado: true
-      material: "GRAY_STAINED_GLASS_PANE"
-      nome: " "
-
     # Cada mundo pode definir material, nome, lore e slot.
     # Placeholders disponíveis na lore:
     # {mundo} = nome exibido do mundo
@@ -133,10 +127,10 @@ rtp:
         nome: "&aMundo Normal"
         lore:
           - ""
-          - "&7Mundo: &f{mundo}"
-          - "&7Tamanho do mundo: &f{tamanho} blocos"
+          - "&8• &7Mundo: &f{mundo}"
+          - "&8• &7Tamanho: &f{tamanho} blocos"
           - ""
-          - "&8Clique para se teleportar."
+          - "&aClique para se teleportar."
 
       mineracao:
         slot: 12
@@ -144,10 +138,10 @@ rtp:
         nome: "&eMineração"
         lore:
           - ""
-          - "&7Mundo: &f{mundo}"
-          - "&7Raio de exploração: &f{raio} blocos"
+          - "&8• &7Mundo: &f{mundo}"
+          - "&8• &7Tamanho: &f{tamanho} blocos"
           - ""
-          - "&8Clique para se teleportar."
+          - "&aClique para se teleportar."
 
       nether:
         slot: 14
@@ -155,10 +149,10 @@ rtp:
         nome: "&cNether"
         lore:
           - ""
-          - "&7Mundo: &f{mundo}"
-          - "&7Raio de exploração: &f{raio} blocos"
+          - "&8• &7Mundo: &f{mundo}"
+          - "&8• &7Tamanho: &f{tamanho} blocos"
           - ""
-          - "&8Clique para se teleportar."
+          - "&aClique para se teleportar."
 
       end:
         slot: 16
@@ -166,10 +160,10 @@ rtp:
         nome: "&5The End"
         lore:
           - ""
-          - "&7Mundo: &f{mundo}"
-          - "&7Raio de exploração: &f{raio} blocos"
+          - "&8• &7Mundo: &f{mundo}"
+          - "&8• &7Tamanho: &f{tamanho} blocos"
           - ""
-          - "&8Clique para se teleportar."
+          - "&aClique para se teleportar."
 
   mundos:
     overworld:
