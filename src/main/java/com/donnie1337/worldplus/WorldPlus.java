@@ -12,6 +12,10 @@ import org.bukkit.entity.EnderDragon;
 import org.bukkit.entity.EntityType;
 import org.bukkit.command.PluginCommand;
 import org.bukkit.plugin.java.JavaPlugin;
+import org.bukkit.event.EventHandler;
+import org.bukkit.event.EventPriority;
+import org.bukkit.event.Listener;
+import org.bukkit.event.player.PlayerCommandSendEvent;
 
 import java.io.File;
 import java.io.IOException;
@@ -21,7 +25,7 @@ import java.nio.file.Path;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
-public final class WorldPlus extends JavaPlugin {
+public final class WorldPlus extends JavaPlugin implements Listener {
     private final Map<String, WorldSettings> worlds = new LinkedHashMap<>();
     private TitleManager titleManager;
     private RtpManager rtpManager;
@@ -82,6 +86,7 @@ public final class WorldPlus extends JavaPlugin {
             rtp.setExecutor(rtpCommand);
             rtp.setTabCompleter(rtpCommand);
         }
+        getServer().getPluginManager().registerEvents(this, this);
         getServer().getPluginManager().registerEvents(titleManager, this);
         getServer().getPluginManager().registerEvents(rtpManager, this);
         getServer().getPluginManager().registerEvents(rtpCommand, this);
@@ -89,6 +94,12 @@ public final class WorldPlus extends JavaPlugin {
         getLogger().info("WorldPlus: portais de Nether e End configurados.");
         getLogger().info("WorldPlus: sistema de RTP configurado.");
         getLogger().info("WorldPlus ativado.");
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR)
+    public void onPlayerCommandSend(PlayerCommandSendEvent event) {
+        // O RTP é público: mantenha-o no pacote de comandos enviado ao cliente.
+        event.getCommands().add("rtp");
     }
 
     public void loadWorldSettings() {
