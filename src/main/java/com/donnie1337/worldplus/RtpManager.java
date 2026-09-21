@@ -14,7 +14,9 @@ import org.bukkit.event.Listener;
 import org.bukkit.event.player.PlayerMoveEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.event.player.PlayerTeleportEvent;
+import java.util.ArrayDeque;
 import java.util.Collections;
+import java.util.Deque;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
@@ -28,6 +30,9 @@ public final class RtpManager implements Listener {
     private final Map<UUID, String> pending = new HashMap<>();
     private final Map<UUID, Location> teleportTargets = new HashMap<>();
     private final Map<String, Long> heatmap = new HashMap<>();
+    private final Deque<ChunkLoadRequest> chunkLoadQueue = new ArrayDeque<>();
+    private int activeChunkLoads;
+    private long nextSynchronousChunkLoadAt;
 
     public RtpManager(WorldPlus plugin) { this.plugin = plugin; }
 
@@ -119,34 +124,161 @@ public final class RtpManager implements Listener {
     private void loadChunk(World world, int chunkX, int chunkZ,
                            Consumer<Chunk> loaded, Runnable failed) {
         if (world.isChunkLoaded(chunkX, chunkZ)) {
-            plugin.getLogger().info("[RTP DEBUG] Chunk já estava carregada: " + world.getName() + " " + chunkX + "," + chunkZ + ".");
+            plugin.getLogger().info("[RTP DEBUG] Chunk já estava carregada: " + world.getName()
+                    + " " + chunkX + "," + chunkZ + ".");
             loaded.accept(world.getChunkAt(chunkX, chunkZ));
             return;
         }
 
+        int maximumQueueSize = Math.max(1, plugin.getConfig().getInt(
+                "rtp.desempenho.tamanho-maximo-da-fila", 200));
+        if (chunkLoadQueue.size() >= maximumQueueSize) {
+            plugin.getLogger().warning("[RTP DEBUG] Fila de RTP cheia; carga recusada para "
+                    + world.getName() + " " + chunkX + "," + chunkZ + ".");
+            failed.run();
+            return;
+        }
+
+        chunkLoadQueue.addLast(new ChunkLoadRequest(world, chunkX, chunkZ, loaded, failed));
+        plugin.getLogger().info("[RTP DEBUG] Chunk adicionada à fila de RTP: " + world.getName()
+                + " " + chunkX + "," + chunkZ + " (aguardando=" + chunkLoadQueue.size() + ").");
+        processChunkLoadQueue();
+    }
+
+    private void processChunkLoadQueue() {
+        int concurrentLoads = Math.max(1, plugin.getConfig().getInt(
+                "rtp.desempenho.cargas-simultaneas-maximas", 1));
+
+        while (activeChunkLoads < concurrentLoads && !chunkLoadQueue.isEmpty()) {
+            ChunkLoadRequest request = chunkLoadQueue.removeFirst();
+            activeChunkLoads++;
+            startChunkLoad(request);
+        }
+    }
+
+    private void startChunkLoad(ChunkLoadRequest request) {
+        World world = request.world();
+        int chunkX = request.chunkX();
+        int chunkZ = request.chunkZ();
+
+        if (world.isChunkLoaded(chunkX, chunkZ)) {
+            completeChunkLoad(request, world.getChunkAt(chunkX, chunkZ));
+            return;
+        }
+
+        // Paper disponibiliza esta API pública. A reflexão mantém o jar
+        // compatível também com Spigot, sem exigir Paper como dependência.
         try {
             var method = world.getClass().getMethod("getChunkAtAsync",
                     int.class, int.class, boolean.class);
             Object result = method.invoke(world, chunkX, chunkZ, true);
             if (result instanceof CompletableFuture<?> future) {
-                plugin.getLogger().info("[RTP DEBUG] Carregamento assíncrono solicitado: " + world.getName() + " " + chunkX + "," + chunkZ + ".");
+                plugin.getLogger().info("[RTP DEBUG] Carregamento assíncrono do Paper solicitado: "
+                        + world.getName() + " " + chunkX + "," + chunkZ + ".");
                 future.whenComplete((chunk, error) -> Bukkit.getScheduler().runTask(plugin, () -> {
                     if (error != null || !(chunk instanceof Chunk loadedChunk)) {
-                        plugin.getLogger().warning("[RTP DEBUG] Falha no carregamento assíncrono da chunk: " + world.getName() + " " + chunkX + "," + chunkZ + ".");
-                        failed.run();
+                        failChunkLoad(request, "API assíncrona do Paper não retornou uma chunk.");
                         return;
                     }
-                    loaded.accept(loadedChunk);
+                    completeChunkLoad(request, loadedChunk);
                 }));
                 return;
             }
         } catch (ReflectiveOperationException ignored) {
-            // Spigot não disponibiliza a API assíncrona de chunks.
+            // Continua para o pipeline interno do Spigot.
         }
 
-        plugin.getLogger().info("[RTP DEBUG] Servidor sem API assíncrona; carregando chunk no thread principal: "
-                + world.getName() + " " + chunkX + "," + chunkZ + ".");
-        loaded.accept(world.getChunkAt(chunkX, chunkZ, true));
+        // Em Spigot, usa o pipeline interno já presente no projeto. Ele evita
+        // chamar getChunkAt(..., true) diretamente durante a geração.
+        if (RtpChunkLoader.request(plugin, world, chunkX, chunkZ, ready -> {
+            if (!ready) {
+                scheduleSynchronousFallback(request);
+                return;
+            }
+
+            try {
+                Chunk loadedChunk = world.getChunkAt(chunkX, chunkZ, false);
+                if (loadedChunk == null || !loadedChunk.isGenerated()) {
+                    scheduleSynchronousFallback(request);
+                    return;
+                }
+                plugin.getLogger().info("[RTP DEBUG] Chunk concluída pelo pipeline do Spigot: "
+                        + world.getName() + " " + chunkX + "," + chunkZ + ".");
+                completeChunkLoad(request, loadedChunk);
+            } catch (Throwable exception) {
+                scheduleSynchronousFallback(request);
+            }
+        })) {
+            plugin.getLogger().info("[RTP DEBUG] Carregamento assíncrono do pipeline Spigot solicitado: "
+                    + world.getName() + " " + chunkX + "," + chunkZ + ".");
+            return;
+        }
+
+        scheduleSynchronousFallback(request);
+    }
+
+    private void scheduleSynchronousFallback(ChunkLoadRequest request) {
+        // Último recurso para forks sem API assíncrona. Como há apenas uma
+        // carga RTP ativa por padrão, uma geração pesada nunca vira uma
+        // avalanche de dezenas de chunks no mesmo servidor.
+        long now = System.currentTimeMillis();
+        long delayMillis = Math.max(0L, nextSynchronousChunkLoadAt - now);
+        long delayTicks = Math.max(1L, (delayMillis + 49L) / 50L);
+        plugin.getLogger().warning("[RTP DEBUG] Usando fallback síncrono controlado para "
+                + request.world().getName() + " " + request.chunkX() + "," + request.chunkZ()
+                + " após " + delayTicks + " tick(s).");
+
+        Bukkit.getScheduler().runTaskLater(plugin, () -> {
+            long startedAt = System.currentTimeMillis();
+            try {
+                Chunk chunk = request.world().getChunkAt(request.chunkX(), request.chunkZ(), true);
+                completeChunkLoad(request, chunk);
+            } catch (Throwable exception) {
+                failChunkLoad(request, "fallback síncrono falhou: "
+                        + exception.getClass().getSimpleName());
+                return;
+            }
+
+            long elapsed = System.currentTimeMillis() - startedAt;
+            long regularInterval = Math.max(0L, plugin.getConfig().getLong(
+                    "rtp.desempenho.intervalo-minimo-entre-cargas-ms", 250L));
+            long heavyThreshold = Math.max(0L, plugin.getConfig().getLong(
+                    "rtp.desempenho.limiar-carga-pesada-ms", 100L));
+            long heavyPause = Math.max(0L, plugin.getConfig().getLong(
+                    "rtp.desempenho.pausa-apos-carga-pesada-ms", 1500L));
+            nextSynchronousChunkLoadAt = System.currentTimeMillis()
+                    + (elapsed >= heavyThreshold ? heavyPause : regularInterval);
+            plugin.getLogger().info("[RTP DEBUG] Fallback síncrono concluído em " + elapsed
+                    + "ms; próxima carga permitida após "
+                    + (elapsed >= heavyThreshold ? heavyPause : regularInterval) + "ms.");
+        }, delayTicks);
+    }
+
+    private void completeChunkLoad(ChunkLoadRequest request, Chunk chunk) {
+        try {
+            request.loaded().accept(chunk);
+        } finally {
+            finishChunkLoad();
+        }
+    }
+
+    private void failChunkLoad(ChunkLoadRequest request, String reason) {
+        plugin.getLogger().warning("[RTP DEBUG] Falha na carga RTP de " + request.world().getName()
+                + " " + request.chunkX() + "," + request.chunkZ() + ": " + reason);
+        try {
+            request.failed().run();
+        } finally {
+            finishChunkLoad();
+        }
+    }
+
+    private void finishChunkLoad() {
+        activeChunkLoads = Math.max(0, activeChunkLoads - 1);
+        Bukkit.getScheduler().runTask(plugin, this::processChunkLoadQueue);
+    }
+
+    private record ChunkLoadRequest(World world, int chunkX, int chunkZ,
+                                    Consumer<Chunk> loaded, Runnable failed) {
     }
 
     private void completeTeleport(Player player, WorldSettings settings, Location safe) {
