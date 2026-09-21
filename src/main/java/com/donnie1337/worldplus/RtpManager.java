@@ -13,6 +13,7 @@ import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.player.PlayerMoveEvent;
+import org.bukkit.event.player.PlayerTeleportEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 
 import java.util.Collections;
@@ -27,6 +28,7 @@ public final class RtpManager implements Listener {
     private final Map<UUID, Long> cooldowns = new HashMap<>();
     private final Map<UUID, Long> delays = new HashMap<>();
     private final Map<UUID, String> pendingWorlds = new HashMap<>();
+    private final Map<UUID, Location> pendingDestinations = new HashMap<>();
     private final Map<String, Long> heatmap = new HashMap<>();
     private final Map<ChunkKey, ChunkRequest> pendingChunks = new HashMap<>();
     private final Map<UUID, Integer> activeLoadsByWorld = new HashMap<>();
@@ -130,16 +132,17 @@ public final class RtpManager implements Listener {
                     return;
                 }
 
-                boolean teleported = player.teleport(
-                        target,
-                        org.bukkit.event.player.PlayerTeleportEvent.TeleportCause.PLUGIN
-                );
+                // Marca o destino para que outro listener não cancele este
+                // teleporte interno e transforme a falha em "local inseguro".
+                pendingDestinations.put(player.getUniqueId(), target);
+                boolean teleported = player.teleport(target, PlayerTeleportEvent.TeleportCause.PLUGIN);
+                pendingDestinations.remove(player.getUniqueId());
 
                 if (!teleported) {
                     removeTicket(target.getWorld(), target.getChunk().getX(), target.getChunk().getZ());
                     cooldowns.remove(player.getUniqueId());
-                    message(player, "local-nao-encontrado",
-                            "&cNão foi possível concluir o teleporte para o local preparado.", null, null);
+                    message(player, "teleporte-cancelado",
+                            "&cO teleporte foi bloqueado por outro sistema do servidor.", null, null);
                     clear(player);
                     return;
                 }
@@ -597,6 +600,7 @@ public final class RtpManager implements Listener {
     private void clear(Player player) {
         UUID uuid = player.getUniqueId();
         pendingWorlds.remove(uuid);
+        pendingDestinations.remove(uuid);
         delays.remove(uuid);
 
         if (plugin.getTitleManager() != null) {
@@ -623,6 +627,19 @@ public final class RtpManager implements Listener {
         return Collections.unmodifiableMap(heatmap);
     }
 
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = false)
+    public void onRtpTeleport(PlayerTeleportEvent event) {
+        if (event.getCause() != PlayerTeleportEvent.TeleportCause.PLUGIN) return;
+
+        Location destination = pendingDestinations.get(event.getPlayer().getUniqueId());
+        if (destination == null) return;
+
+        // O mapa só é preenchido durante o /rtp. Mantemos o destino aleatório
+        // escolhido pelo WorldPlus caso outro plugin tenha cancelado o evento.
+        event.setCancelled(false);
+        event.setTo(destination);
+    }
+
     @EventHandler(priority = EventPriority.MONITOR)
     public void onMove(PlayerMoveEvent event) {
         if (!plugin.getConfig().getBoolean("rtp.geral.cancelar-ao-mover", false)) return;
@@ -647,6 +664,7 @@ public final class RtpManager implements Listener {
     public void onQuit(PlayerQuitEvent event) {
         UUID uuid = event.getPlayer().getUniqueId();
         pendingWorlds.remove(uuid);
+        pendingDestinations.remove(uuid);
         delays.remove(uuid);
         cooldowns.remove(uuid);
     }
