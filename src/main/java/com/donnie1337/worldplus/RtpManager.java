@@ -97,18 +97,24 @@ public final class RtpManager implements Listener {
     }
 
     private Location safeAt(World world, Chunk ignored, int x, int z, WorldSettings settings) {
-        int minY = Math.max(world.getMinHeight(), plugin.getConfig().getInt("rtp.mundos." + settings.id() + ".y-minimo", world.getMinHeight()));
-        int maxY = Math.min(world.getMaxHeight() - 3, plugin.getConfig().getInt("rtp.mundos." + settings.id() + ".y-maximo", world.getMaxHeight() - 3));
         if (world.getEnvironment() == World.Environment.NETHER) {
-            for (int y = maxY; y >= minY; y--) { Location safe = check(world, x, y, z); if (safe != null) return safe; }
+            int minY = Math.max(world.getMinHeight() + 1, plugin.getConfig().getInt(
+                    "rtp.mundos." + settings.id() + ".y-minimo", 32));
+            int maxY = Math.min(world.getMaxHeight() - 3, plugin.getConfig().getInt(
+                    "rtp.mundos." + settings.id() + ".y-maximo", 120));
+            for (int y = maxY; y >= minY; y--) {
+                Location safe = check(world, x, y, z);
+                if (safe != null) return safe;
+            }
             return null;
         }
+
+        // Para mundos com superfície, a altura real da coordenada já vem da
+        // chunk carregada. Só rejeitamos água, lava, ar e perigos explícitos.
         Block highest = world.getHighestBlockAt(x, z);
-        for (int y = Math.min(maxY, highest.getY()); y >= Math.max(minY, highest.getY() - 12); y--) {
-            Location safe = check(world, x, y, z);
-            if (safe != null) return safe;
-        }
-        return null;
+        Material ground = highest.getType();
+        if (ground.isAir() || dangerous(ground)) return null;
+        return new Location(world, x + .5D, highest.getY() + 1.0D, z + .5D);
     }
 
     private Location check(World w, int x, int y, int z) {
