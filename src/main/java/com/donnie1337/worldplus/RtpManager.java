@@ -236,9 +236,7 @@ public final class RtpManager implements Listener {
         }
 
         if (!world.isChunkGenerated(chunkX, chunkZ)) {
-            retry(request.player(), world, request.settings(), request.maxAttempts(),
-                    request.attempt(), request.callback());
-            processChunkQueue();
+            generateChunkForRtp(request);
             return;
         }
 
@@ -257,15 +255,7 @@ public final class RtpManager implements Listener {
 
             lastChunkLoadDurationMs = Math.max(0L,
                     (System.nanoTime() - loadStartedAt) / 1_000_000L);
-            long minIntervalMs = Math.max(0L, plugin.getConfig().getLong(
-                    "rtp.desempenho.intervalo-minimo-entre-cargas-ms", 250L));
-            long heavyThresholdMs = Math.max(1L, plugin.getConfig().getLong(
-                    "rtp.desempenho.limiar-carga-pesada-ms", 100L));
-            long heavyPauseMs = Math.max(0L, plugin.getConfig().getLong(
-                    "rtp.desempenho.pausa-apos-carga-pesada-ms", 1500L));
-            long pauseMs = Math.max(minIntervalMs,
-                    lastChunkLoadDurationMs >= heavyThresholdMs ? heavyPauseMs : 0L);
-            nextChunkLoadAllowedAtNanos = System.nanoTime() + pauseMs * 1_000_000L;
+            updateChunkLoadDelay();
 
             scheduleChunkCheck(request);
         } catch (Throwable ignored) {
@@ -275,6 +265,67 @@ public final class RtpManager implements Listener {
                     request.attempt(), request.callback());
             processChunkQueue();
         }
+    }
+
+    /**
+     * O RTP pode escolher áreas novas. Antes, elas eram descartadas porque
+     * isChunkGenerated retornava false, tornando o comando inutilizável em
+     * mundos ainda não pré-gerados. A geração fica serializada pela mesma fila
+     * usada nas cargas, evitando várias gerações pesadas no mesmo instante.
+     */
+    private void generateChunkForRtp(ChunkRequest request) {
+        World world = request.world();
+        activeLoadsByWorld.merge(world.getUID(), 1, Integer::sum);
+        pendingChunks.put(request.key(), request);
+
+        Bukkit.getScheduler().runTask(plugin, () -> {
+            if (pendingChunks.get(request.key()) != request || !request.player().isOnline()) {
+                pendingChunks.remove(request.key());
+                finishChunkLoad(request);
+                processChunkQueue();
+                return;
+            }
+
+            try {
+                long startedAt = System.nanoTime();
+                Chunk chunk = world.getChunkAt(request.key().x(), request.key().z(), true);
+                lastChunkLoadDurationMs = Math.max(0L,
+                        (System.nanoTime() - startedAt) / 1_000_000L);
+                updateChunkLoadDelay();
+
+                // Mantém a chunk carregada enquanto o snapshot é analisado e
+                // até o teleporte ser concluído.
+                world.addPluginChunkTicket(request.key().x(), request.key().z(), plugin);
+
+                pendingChunks.remove(request.key());
+                finishChunkLoad(request);
+                inspectLoadedChunk(request, chunk);
+            } catch (Throwable exception) {
+                plugin.getLogger().warning(
+                        "RTP: não foi possível gerar a chunk "
+                                + request.key().x() + "," + request.key().z()
+                                + " em " + world.getName() + ": "
+                                + exception.getClass().getSimpleName()
+                );
+                pendingChunks.remove(request.key());
+                finishChunkLoad(request);
+                retry(request.player(), world, request.settings(), request.maxAttempts(),
+                        request.attempt(), request.callback());
+                processChunkQueue();
+            }
+        });
+    }
+
+    private void updateChunkLoadDelay() {
+        long minIntervalMs = Math.max(0L, plugin.getConfig().getLong(
+                "rtp.desempenho.intervalo-minimo-entre-cargas-ms", 250L));
+        long heavyThresholdMs = Math.max(1L, plugin.getConfig().getLong(
+                "rtp.desempenho.limiar-carga-pesada-ms", 100L));
+        long heavyPauseMs = Math.max(0L, plugin.getConfig().getLong(
+                "rtp.desempenho.pausa-apos-carga-pesada-ms", 1500L));
+        long pauseMs = Math.max(minIntervalMs,
+                lastChunkLoadDurationMs >= heavyThresholdMs ? heavyPauseMs : 0L);
+        nextChunkLoadAllowedAtNanos = System.nanoTime() + pauseMs * 1_000_000L;
     }
 
     private void finishChunkLoad(ChunkRequest request) {
