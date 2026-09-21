@@ -433,7 +433,7 @@ public final class RtpManager implements Listener {
             if (floor == Material.BEDROCK) continue;
             if (isLiquid(floor) || isLiquid(feet) || isLiquid(head)) continue;
             if (!floor.isSolid()) continue;
-            if (!feet.isAir() || !head.isAir()) continue;
+            if (!isPassable(feet) || !isPassable(head)) continue;
 
             int x = (snapshot.getX() << 4) + localX;
             int z = (snapshot.getZ() << 4) + localZ;
@@ -459,7 +459,7 @@ public final class RtpManager implements Listener {
             Material feet = snapshot.getBlockType(localX, y + 1, localZ);
             Material head = snapshot.getBlockType(localX, y + 2, localZ);
             if (isLiquid(feet) || isLiquid(head)
-                    || !feet.isAir() || !head.isAir()) {
+                    || !isPassable(feet) || !isPassable(head)) {
                 continue;
             }
 
@@ -482,7 +482,7 @@ public final class RtpManager implements Listener {
             Material head = snapshot.getBlockType(localX, y + 2, localZ);
 
             if (isLiquid(feet) || isLiquid(head)
-                    || !feet.isAir() || !head.isAir()) {
+                    || !isPassable(feet) || !isPassable(head)) {
                 continue;
             }
 
