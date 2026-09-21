@@ -136,6 +136,13 @@ public final class RtpManager implements Listener {
                 // teleporte interno e transforme a falha em "local inseguro".
                 pendingDestinations.put(player.getUniqueId(), target);
                 boolean teleported = player.teleport(target, PlayerTeleportEvent.TeleportCause.PLUGIN);
+
+                // Alguns sistemas de proteção bloqueiam somente teleporte com
+                // causa PLUGIN. A segunda tentativa mantém o mesmo destino,
+                // porém representa corretamente um comando solicitado pelo jogador.
+                if (!teleported) {
+                    teleported = player.teleport(target, PlayerTeleportEvent.TeleportCause.COMMAND);
+                }
                 pendingDestinations.remove(player.getUniqueId());
 
                 if (!teleported) {
@@ -629,7 +636,8 @@ public final class RtpManager implements Listener {
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = false)
     public void onRtpTeleport(PlayerTeleportEvent event) {
-        if (event.getCause() != PlayerTeleportEvent.TeleportCause.PLUGIN) return;
+        if (event.getCause() != PlayerTeleportEvent.TeleportCause.PLUGIN
+                && event.getCause() != PlayerTeleportEvent.TeleportCause.COMMAND) return;
 
         Location destination = pendingDestinations.get(event.getPlayer().getUniqueId());
         if (destination == null) return;
