@@ -22,6 +22,9 @@ final class RtpTeleportGuard implements Listener {
         Location destination = rtpManager.getPendingDestination(event.getPlayer().getUniqueId());
         if (destination == null) return;
 
+        boolean wasCancelled = event.isCancelled();
+        rtpManager.getPlugin().getLogger().info("[RTP DEBUG] Evento PlayerTeleportEvent: causa="
+                + event.getCause() + ", cancelado-antes-do-guard=" + wasCancelled + ".");
         event.setCancelled(false);
         event.setTo(destination);
     }

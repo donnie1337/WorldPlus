@@ -26,6 +26,7 @@ public final class RtpManager implements Listener {
     private final WorldPlus plugin;
     private final Map<UUID, Long> cooldowns = new HashMap<>();
     private final Map<UUID, String> pending = new HashMap<>();
+    private final Map<UUID, Location> teleportTargets = new HashMap<>();
     private final Map<String, Long> heatmap = new HashMap<>();
 
     public RtpManager(WorldPlus plugin) { this.plugin = plugin; }
@@ -85,7 +86,17 @@ public final class RtpManager implements Listener {
             }
 
             debug(player, "Destino seguro: X=" + safe.getBlockX() + ", Y=" + safe.getBlockY() + ", Z=" + safe.getBlockZ() + ".");
-            if (!player.teleport(safe, PlayerTeleportEvent.TeleportCause.PLUGIN)) {
+            if (player.isInsideVehicle()) {
+                debug(player, "Jogador estava em veículo; removendo antes do teleporte.");
+                player.leaveVehicle();
+            }
+            debug(player, "Estado antes do teleporte: dead=" + player.isDead()
+                    + ", veículos-passageiros=" + player.getPassengers().size() + ".");
+            teleportTargets.put(player.getUniqueId(), safe);
+            boolean teleported = player.teleport(safe, PlayerTeleportEvent.TeleportCause.PLUGIN);
+            teleportTargets.remove(player.getUniqueId());
+
+            if (!teleported) {
                 debug(player, "Falha: Player#teleport retornou false.");
                 msg(player, "teleporte-cancelado",
                         "&cO teleporte foi bloqueado por outro sistema do servidor.", null, null);
@@ -211,7 +222,11 @@ public final class RtpManager implements Listener {
     private long cooldownRemaining(Player p) { return Math.max(0L, (cooldowns.getOrDefault(p.getUniqueId(), 0L) - System.currentTimeMillis() + 999L) / 1000L); }
     public long cooldownRemainingSeconds(Player p) { return cooldownRemaining(p); }
     public Map<String, Long> getHeatmap() { return Collections.unmodifiableMap(heatmap); }
-    Location getPendingDestination(UUID ignored) { return null; }
+    WorldPlus getPlugin() {
+        return plugin;
+    }
+
+    Location getPendingDestination(UUID playerId) { return teleportTargets.get(playerId); }
 
     @EventHandler(priority = EventPriority.MONITOR)
     public void onMove(PlayerMoveEvent e) {
