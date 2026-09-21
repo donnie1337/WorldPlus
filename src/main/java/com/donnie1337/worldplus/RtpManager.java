@@ -143,6 +143,11 @@ public final class RtpManager implements Listener {
                 if (!teleported) {
                     teleported = player.teleport(target, PlayerTeleportEvent.TeleportCause.COMMAND);
                 }
+                if (!teleported) {
+                    // Compatibilidade com proteções que bloqueiam causas
+                    // PLUGIN e COMMAND, mas permitem teleporte interno seguro.
+                    teleported = player.teleport(target, PlayerTeleportEvent.TeleportCause.UNKNOWN);
+                }
                 pendingDestinations.remove(player.getUniqueId());
 
                 if (!teleported) {
@@ -637,7 +642,8 @@ public final class RtpManager implements Listener {
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = false)
     public void onRtpTeleport(PlayerTeleportEvent event) {
         if (event.getCause() != PlayerTeleportEvent.TeleportCause.PLUGIN
-                && event.getCause() != PlayerTeleportEvent.TeleportCause.COMMAND) return;
+                && event.getCause() != PlayerTeleportEvent.TeleportCause.COMMAND
+                && event.getCause() != PlayerTeleportEvent.TeleportCause.UNKNOWN) return;
 
         Location destination = pendingDestinations.get(event.getPlayer().getUniqueId());
         if (destination == null) return;
