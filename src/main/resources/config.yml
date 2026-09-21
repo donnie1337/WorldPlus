@@ -90,18 +90,12 @@ rtp:
       - cave_air
       - void_air
 
-  # Proteções para impedir que uma sequência de RTP force várias cargas pesadas
-  # de chunks em ticks consecutivos. As cargas continuam sendo feitas pelo
-  # thread principal porque a API oficial do Spigot exige acesso Bukkit no
-  # thread principal.
+  # Proteção contra lag: no Spigot o RTP usa somente chunks previamente
+  # geradas. Para cobrir o mapa inteiro, faça a pré-geração uma vez (ex. Chunky).
+  # No Paper, o WorldPlus usa automaticamente a API assíncrona.
   desempenho:
-    # Limita a geração RTP globalmente. Em Spigot puro, mantenha 1 para
-    # impedir que muitos jogadores gerem chunks no mesmo instante.
     cargas-simultaneas-maximas: 1
     tamanho-maximo-da-fila: 200
-    intervalo-minimo-entre-cargas-ms: 250
-    limiar-carga-pesada-ms: 100
-    pausa-apos-carga-pesada-ms: 1500
 
   mensagens:
     rtp-em-andamento: "&cAguarde para se teleportar novamente."
