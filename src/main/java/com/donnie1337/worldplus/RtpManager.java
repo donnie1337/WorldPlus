@@ -19,6 +19,8 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
+import java.util.concurrent.CompletableFuture;
+import java.util.function.Consumer;
 
 public final class RtpManager implements Listener {
     private final WorldPlus plugin;
@@ -59,24 +61,74 @@ public final class RtpManager implements Listener {
         Location point = randomPoint(world, settings);
         if (point == null) { retry(player, settings, world, remaining); return; }
 
-        // Fluxo intencionalmente simples: sorteia X/Z, carrega a chunk e valida
-        // a coluna. Água, lava e blocos perigosos fazem outra coordenada ser sorteada.
-        Chunk chunk = world.getChunkAt(point.getBlockX() >> 4, point.getBlockZ() >> 4, true);
-        Location safe = safeAt(world, chunk, point.getBlockX(), point.getBlockZ(), settings);
-        if (safe == null || !player.teleport(safe, PlayerTeleportEvent.TeleportCause.PLUGIN)) {
-            retry(player, settings, world, remaining);
+        // Carregamento assíncrono no Paper; em Spigot puro o fallback usa a
+        // API síncrona uma única vez, sem iniciar novas cargas se o teleporte
+        // for recusado por outro sistema.
+        loadChunk(world, point.getBlockX() >> 4, point.getBlockZ() >> 4, chunk -> {
+            if (!player.isOnline() || !pending.containsKey(player.getUniqueId())) {
+                clear(player);
+                return;
+            }
+
+            Location safe = safeAt(world, chunk, point.getBlockX(), point.getBlockZ(), settings);
+            if (safe == null) {
+                retry(player, settings, world, remaining);
+                return;
+            }
+
+            if (!player.teleport(safe, PlayerTeleportEvent.TeleportCause.PLUGIN)) {
+                msg(player, "teleporte-cancelado",
+                        "&cO teleporte foi bloqueado por outro sistema do servidor.", null, null);
+                clear(player);
+                return;
+            }
+
+            completeTeleport(player, settings, safe);
+        }, () -> retry(player, settings, world, remaining));
+    }
+
+    private void loadChunk(World world, int chunkX, int chunkZ,
+                           Consumer<Chunk> loaded, Runnable failed) {
+        if (world.isChunkLoaded(chunkX, chunkZ)) {
+            loaded.accept(world.getChunkAt(chunkX, chunkZ));
             return;
         }
 
-        long cooldown = Math.max(0L, plugin.getConfig().getLong("rtp.mundos." + settings.id() + ".cooldown-segundos",
+        try {
+            var method = world.getClass().getMethod("getChunkAtAsync",
+                    int.class, int.class, boolean.class);
+            Object result = method.invoke(world, chunkX, chunkZ, true);
+            if (result instanceof CompletableFuture<?> future) {
+                future.whenComplete((chunk, error) -> Bukkit.getScheduler().runTask(plugin, () -> {
+                    if (error != null || !(chunk instanceof Chunk loadedChunk)) {
+                        failed.run();
+                        return;
+                    }
+                    loaded.accept(loadedChunk);
+                }));
+                return;
+            }
+        } catch (ReflectiveOperationException ignored) {
+            // Spigot não disponibiliza a API assíncrona de chunks.
+        }
+
+        loaded.accept(world.getChunkAt(chunkX, chunkZ, true));
+    }
+
+    private void completeTeleport(Player player, WorldSettings settings, Location safe) {
+        long cooldown = Math.max(0L, plugin.getConfig().getLong(
+                "rtp.mundos." + settings.id() + ".cooldown-segundos",
                 plugin.getConfig().getLong("rtp.geral.cooldown-segundos", 5L)));
-        if (cooldown > 0L) cooldowns.put(player.getUniqueId(), System.currentTimeMillis() + cooldown * 1000L);
+        if (cooldown > 0L) {
+            cooldowns.put(player.getUniqueId(), System.currentTimeMillis() + cooldown * 1000L);
+        }
+
         clear(player);
         if (plugin.getTitleManager() != null) {
             plugin.getTitleManager().endRtpTitle(player);
             plugin.getTitleManager().showBiomeAfterRtp(player, safe);
         }
-        heatmap.merge(world.getName(), 1L, Long::sum);
+        heatmap.merge(safe.getWorld().getName(), 1L, Long::sum);
     }
 
     private void retry(Player p, WorldSettings s, World w, int remaining) {
