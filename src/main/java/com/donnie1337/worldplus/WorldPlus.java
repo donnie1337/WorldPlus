@@ -91,6 +91,10 @@ public final class WorldPlus extends JavaPlugin implements Listener {
         getServer().getPluginManager().registerEvents(rtpManager, this);
         getServer().getPluginManager().registerEvents(rtpCommand, this);
         getServer().getPluginManager().registerEvents(new WorldPortalListener(this), this);
+        // Registrado no tick seguinte para ficar após listeners ativados junto
+        // com o servidor e preservar exclusivamente os RTPs do WorldPlus.
+        Bukkit.getScheduler().runTask(this, () ->
+                getServer().getPluginManager().registerEvents(new RtpTeleportGuard(rtpManager), this));
         getLogger().info("WorldPlus: portais de Nether e End configurados.");
         getLogger().info("WorldPlus: sistema de RTP configurado.");
         getLogger().info("WorldPlus ativado.");

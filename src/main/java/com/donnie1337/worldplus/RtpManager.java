@@ -631,6 +631,10 @@ public final class RtpManager implements Listener {
         return Math.max(0L, (until - System.currentTimeMillis() + 999L) / 1000L);
     }
 
+    Location getPendingDestination(UUID playerId) {
+        return pendingDestinations.get(playerId);
+    }
+
     public long cooldownRemainingSeconds(Player player) {
         return cooldownRemaining(player);
     }
