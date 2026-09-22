@@ -123,7 +123,7 @@ public final class RtpManager implements Listener {
     private void loadChunk(World world, int chunkX, int chunkZ,
                            Consumer<Chunk> loaded, Runnable failed) {
         if (world.isChunkLoaded(chunkX, chunkZ)) {
-            plugin.getLogger().info("[RTP DEBUG] Chunk já estava carregada: " + world.getName()
+            debug("[RTP DEBUG] Chunk já estava carregada: " + world.getName()
                     + " " + chunkX + "," + chunkZ + ".");
             loaded.accept(world.getChunkAt(chunkX, chunkZ));
             return;
@@ -132,14 +132,14 @@ public final class RtpManager implements Listener {
         int maximumQueueSize = Math.max(1, plugin.getConfig().getInt(
                 "rtp.desempenho.tamanho-maximo-da-fila", 200));
         if (chunkLoadQueue.size() >= maximumQueueSize) {
-            plugin.getLogger().warning("[RTP DEBUG] Fila de RTP cheia; carga recusada para "
+            debug("[RTP DEBUG] Fila de RTP cheia; carga recusada para "
                     + world.getName() + " " + chunkX + "," + chunkZ + ".");
             failed.run();
             return;
         }
 
         chunkLoadQueue.addLast(new ChunkLoadRequest(world, chunkX, chunkZ, loaded, failed));
-        plugin.getLogger().info("[RTP DEBUG] Chunk adicionada à fila de RTP: " + world.getName()
+        debug("[RTP DEBUG] Chunk adicionada à fila de RTP: " + world.getName()
                 + " " + chunkX + "," + chunkZ + " (aguardando=" + chunkLoadQueue.size() + ").");
         processChunkLoadQueue();
     }
@@ -167,7 +167,7 @@ public final class RtpManager implements Listener {
 
         // API oficial do Paper: a geração/carregamento ocorre fora do
         // thread principal e o resultado volta para ele antes da validação.
-        plugin.getLogger().info("[RTP DEBUG] Carregamento assíncrono do Paper solicitado: "
+        debug("[RTP DEBUG] Carregamento assíncrono do Paper solicitado: "
                 + world.getName() + " " + chunkX + "," + chunkZ + ".");
         world.getChunkAtAsync(chunkX, chunkZ, true).whenComplete((chunk, error) ->
                 Bukkit.getScheduler().runTask(plugin, () -> {
@@ -190,7 +190,7 @@ public final class RtpManager implements Listener {
     }
 
     private void failChunkLoad(ChunkLoadRequest request, String reason) {
-        plugin.getLogger().warning("[RTP DEBUG] Falha na carga RTP de " + request.world().getName()
+        debug("[RTP DEBUG] Falha na carga RTP de " + request.world().getName()
                 + " " + request.chunkX() + "," + request.chunkZ() + ": " + reason);
         try {
             request.failed().run();
@@ -259,11 +259,11 @@ public final class RtpManager implements Listener {
         Block highest = world.getHighestBlockAt(x, z);
         Material ground = highest.getType();
         if (ground.isAir() || dangerous(ground)) {
-            plugin.getLogger().info("[RTP DEBUG] Superfície rejeitada em " + world.getName() + " X=" + x + " Z=" + z
+            debug("[RTP DEBUG] Superfície rejeitada em " + world.getName() + " X=" + x + " Z=" + z
                     + ": " + ground + ".");
             return null;
         }
-        plugin.getLogger().info("[RTP DEBUG] Superfície aceita em " + world.getName() + " X=" + x + " Y="
+        debug("[RTP DEBUG] Superfície aceita em " + world.getName() + " X=" + x + " Y="
                 + highest.getY() + " Z=" + z + ": " + ground + ".");
         return new Location(world, x + .5D, highest.getY() + 1.0D, z + .5D);
     }
@@ -304,9 +304,9 @@ public final class RtpManager implements Listener {
     @EventHandler public void onQuit(PlayerQuitEvent e) { clear(e.getPlayer()); cooldowns.remove(e.getPlayer().getUniqueId()); }
     public void shutdown() { pending.clear(); }
     private void clear(Player p) { pending.remove(p.getUniqueId()); if (plugin.getTitleManager() != null) plugin.getTitleManager().endRtpTitle(p); }
-    private void debug(Player player, String message) {
+    private void debug(String message) {\n        if (plugin.getConfig().getBoolean("rtp.debug", false)) {\n            plugin.getLogger().info("[RTP DEBUG] " + message);\n        }\n    }\n\n    private void debug(Player player, String message) {
         if (plugin.getConfig().getBoolean("rtp.debug", true)) {
-            plugin.getLogger().info("[RTP DEBUG] " + player.getName() + " • " + message);
+            debug("[RTP DEBUG] " + player.getName() + " • " + message);
         }
     }
 
