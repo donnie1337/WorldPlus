@@ -126,11 +126,6 @@ rtp:
     # Título do menu.
     titulo: "&0&lRTP &8• &fEscolha seu mundo"
 
-    decoracao:
-      habilitada: true
-      material: "BLACK_STAINED_GLASS_PANE"
-      nome: "&0"
-
     # Cada mundo pode definir material, nome, lore e slot.
     # Placeholders disponíveis na lore:
     # {mundo} = nome exibido do mundo
@@ -140,46 +135,67 @@ rtp:
       overworld:
         slot: 10
         material: "GRASS_BLOCK"
-        nome: "&aMundo Normal"
+        nome: "&a&lᴏᴠᴇʀᴡᴏʀʟᴅ &8• &f(Principal)"
         lore:
+          - "&fO mundo principal do servidor,"
+          - "&fconstrua sua casa e farms aqui"
+          - "&fsem limite para evoluir."
           - ""
-          - "&8• &7Mundo: &f{mundo}"
-          - "&8• &7Tamanho: &f{tamanho} blocos"
+          - "&7Informações:"
+          - "&e▪ &7Tamanho: &a{tamanho}"
+          - "&e▪ &7Reset: &cNunca"
+          - "&e▪ &7Proteção: &aSim"
+          - "&e▪ &7PvP: &eOpcional &8(/pvp)"
           - ""
-          - "&a&lCLIQUE PARA TELEPORTAR"
+          - "&aClique para teleportar."
 
       mineracao:
         slot: 12
-        material: "DIAMOND_PICKAXE"
-        nome: "&eMineração"
+        material: "DEEPSLATE_DIAMOND_ORE"
+        nome: "&e&lᴍɪɴᴇʀᴀçãᴏ &8• &f(Mineração)"
         lore:
+          - "&fExtraia recursos e encontre novos"
+          - "&fdesafios para evoluir sua jornada."
           - ""
-          - "&8• &7Mundo: &f{mundo}"
-          - "&8• &7Tamanho: &f{tamanho} blocos"
+          - "&7Informações:"
+          - "&e▪ &7Tamanho: &a{tamanho}"
+          - "&e▪ &7Reset: &eA cada 90 dias"
+          - "&e▪ &7Proteção: &aSim"
+          - "&e▪ &7PvP: &eOpcional &8(/pvp)"
           - ""
-          - "&e&lCLIQUE PARA TELEPORTAR"
+          - "&eClique para teleportar."
 
       nether:
         slot: 14
         material: "NETHERRACK"
-        nome: "&cNether"
+        nome: "&c&lɴᴇᴛʜᴇʀ &8• &f(Inferno)"
         lore:
+          - "&fAtravesse o fogo e enfrente os"
+          - "&fperigos da dimensão infernal."
           - ""
-          - "&8• &7Mundo: &f{mundo}"
-          - "&8• &7Tamanho: &f{tamanho} blocos"
+          - "&7Informações:"
+          - "&e▪ &7Tamanho: &a{tamanho}"
+          - "&e▪ &7Reset: &eA cada 90 dias"
+          - "&e▪ &7Proteção: &aSim"
+          - "&e▪ &7PvP: &eOpcional &8(/pvp)"
           - ""
-          - "&c&lCLIQUE PARA TELEPORTAR"
+          - "&cClique para teleportar."
 
       end:
         slot: 16
         material: "END_STONE"
-        nome: "&5The End"
+        nome: "&5&lᴛʜᴇ ᴇɴᴅ &8• &f(Fim)"
         lore:
+          - "&fExplore as ilhas distantes e os"
+          - "&fmistérios da dimensão do Fim."
           - ""
-          - "&8• &7Mundo: &f{mundo}"
-          - "&8• &7Tamanho: &f{tamanho} blocos"
+          - "&7Informações:"
+          - "&e▪ &7Tamanho: &a{tamanho}"
+          - "&e▪ &7Reset: &eA cada 90 dias"
+          - "&e▪ &7Proteção: &aSim"
+          - "&e▪ &7PvP: &eOpcional &8(/pvp)"
           - ""
-          - "&5&lCLIQUE PARA TELEPORTAR"
+          - "&5Clique para teleportar."
 
   mundos:
     overworld:

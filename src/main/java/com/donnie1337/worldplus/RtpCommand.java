@@ -17,9 +17,11 @@ import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.persistence.PersistentDataType;
 
+import java.text.NumberFormat;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Locale;
 
 public final class RtpCommand implements CommandExecutor, TabCompleter, Listener {
     private final WorldPlus plugin;
@@ -42,7 +44,6 @@ public final class RtpCommand implements CommandExecutor, TabCompleter, Listener
                 "rtp.gui.titulo", "&8Teleporte Aleatório"
         );
         Inventory inventory = Bukkit.createInventory(null, size, color(title));
-        addDecoration(inventory);
 
         for (WorldSettings settings : plugin.getWorlds().values()) {
             String path = "rtp.gui.mundos." + settings.id();
@@ -102,7 +103,7 @@ public final class RtpCommand implements CommandExecutor, TabCompleter, Listener
                     .map(line -> line
                             .replace("{mundo}", displayWorldName(settings))
                             .replace("{id}", settings.id())
-                            .replace("{tamanho}", format(settings.size()) + " x " + format(settings.size())))
+                            .replace("{tamanho}", formatSize(settings.size())))
                     .map(this::color)
                     .toList();
 
@@ -112,22 +113,6 @@ public final class RtpCommand implements CommandExecutor, TabCompleter, Listener
         }
 
         player.openInventory(inventory);
-    }
-
-    private void addDecoration(Inventory inventory) {
-        if (!plugin.getConfig().getBoolean("rtp.gui.decoracao.habilitada", true)) return;
-        Material material = material(plugin.getConfig().getString("rtp.gui.decoracao.material", "BLACK_STAINED_GLASS_PANE"),
-                Material.BLACK_STAINED_GLASS_PANE);
-        String name = color(plugin.getConfig().getString("rtp.gui.decoracao.nome", "&0"));
-        for (int slot = 0; slot < inventory.getSize(); slot++) {
-            ItemStack item = new ItemStack(material);
-            ItemMeta meta = item.getItemMeta();
-            if (meta != null) {
-                meta.setDisplayName(name);
-                item.setItemMeta(meta);
-            }
-            inventory.setItem(slot, item);
-        }
     }
 
     private Material material(String value, Material fallback) {
@@ -218,7 +203,9 @@ public final class RtpCommand implements CommandExecutor, TabCompleter, Listener
         return ChatColor.translateAlternateColorCodes('&', message);
     }
 
-    private String format(double value) {
-        return value == Math.rint(value) ? Long.toString((long) value) : Double.toString(value);
+    private String formatSize(double value) {
+        NumberFormat format = NumberFormat.getIntegerInstance(Locale.forLanguageTag("pt-BR"));
+        format.setGroupingUsed(true);
+        return format.format(value) + " × " + format.format(value);
     }
 }
