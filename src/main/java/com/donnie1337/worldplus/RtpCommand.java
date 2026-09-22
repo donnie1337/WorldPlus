@@ -13,6 +13,7 @@ import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.inventory.Inventory;
+import org.bukkit.inventory.ItemFlag;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.persistence.PersistentDataType;
@@ -108,6 +109,7 @@ public final class RtpCommand implements CommandExecutor, TabCompleter, Listener
                     .toList();
 
             meta.setLore(finalLore);
+            meta.addItemFlags(ItemFlag.HIDE_ATTRIBUTES);
             item.setItemMeta(meta);
             inventory.setItem(slot, item);
         }
@@ -135,8 +137,6 @@ public final class RtpCommand implements CommandExecutor, TabCompleter, Listener
         if (item == null || !item.hasItemMeta() || item.getItemMeta().getDisplayName() == null) return;
         String id = item.getItemMeta().getPersistentDataContainer().get(worldKey, PersistentDataType.STRING);
         if (id != null && plugin.getSettings(id) != null) {
-            // Fecha o GUI imediatamente no próprio evento de clique.
-            // O pedido do RTP começa no mesmo tick, sem tarefa intermediária.
             player.closeInventory();
             manager.request(player, id);
         }
