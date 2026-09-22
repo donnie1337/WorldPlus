@@ -135,11 +135,10 @@ rtp:
       overworld:
         slot: 10
         material: "GRASS_BLOCK"
-        nome: "&a&lᴏᴠᴇʀᴡᴏʀʟᴅ &8• &f(Principal)"
+        nome: "&aOverworld &8• &7(Mundo Principal)"
         lore:
-          - "&fO mundo principal do servidor,"
-          - "&fconstrua sua casa e farms aqui"
-          - "&fsem limite para evoluir."
+          - "&7Construa sua base, cultive recursos"
+          - "&7e avance no mundo principal."
           - ""
           - "&7Informações:"
           - "&e▪ &7Tamanho: &a{tamanho}"
@@ -147,15 +146,15 @@ rtp:
           - "&e▪ &7Proteção: &aSim"
           - "&e▪ &7PvP: &eOpcional &8(/pvp)"
           - ""
-          - "&aClique para teleportar."
+          - "&aClique para explorar."
 
       mineracao:
         slot: 12
         material: "DEEPSLATE_DIAMOND_ORE"
-        nome: "&e&lᴍɪɴᴇʀᴀçãᴏ &8• &f(Mineração)"
+        nome: "&eMineração &8• &7(Mundo de Recursos)"
         lore:
-          - "&fExtraia recursos e encontre novos"
-          - "&fdesafios para evoluir sua jornada."
+          - "&7Busque minérios raros e materiais"
+          - "&7para fortalecer sua aventura."
           - ""
           - "&7Informações:"
           - "&e▪ &7Tamanho: &a{tamanho}"
@@ -163,15 +162,15 @@ rtp:
           - "&e▪ &7Proteção: &aSim"
           - "&e▪ &7PvP: &eOpcional &8(/pvp)"
           - ""
-          - "&eClique para teleportar."
+          - "&eClique para explorar."
 
       nether:
         slot: 14
         material: "NETHERRACK"
-        nome: "&c&lɴᴇᴛʜᴇʀ &8• &f(Inferno)"
+        nome: "&cNether &8• &7(Dimensão Infernal)"
         lore:
-          - "&fAtravesse o fogo e enfrente os"
-          - "&fperigos da dimensão infernal."
+          - "&7Atravesse fortalezas, lava e perigos"
+          - "&7em busca de novos caminhos."
           - ""
           - "&7Informações:"
           - "&e▪ &7Tamanho: &a{tamanho}"
@@ -179,15 +178,15 @@ rtp:
           - "&e▪ &7Proteção: &aSim"
           - "&e▪ &7PvP: &eOpcional &8(/pvp)"
           - ""
-          - "&cClique para teleportar."
+          - "&cClique para explorar."
 
       end:
         slot: 16
         material: "END_STONE"
-        nome: "&5&lᴛʜᴇ ᴇɴᴅ &8• &f(Fim)"
+        nome: "&5The End &8• &7(Dimensão Final)"
         lore:
-          - "&fExplore as ilhas distantes e os"
-          - "&fmistérios da dimensão do Fim."
+          - "&7Viaje por ilhas distantes e descubra"
+          - "&7os segredos escondidos no vazio."
           - ""
           - "&7Informações:"
           - "&e▪ &7Tamanho: &a{tamanho}"
@@ -195,7 +194,7 @@ rtp:
           - "&e▪ &7Proteção: &aSim"
           - "&e▪ &7PvP: &eOpcional &8(/pvp)"
           - ""
-          - "&5Clique para teleportar."
+          - "&5Clique para explorar."
 
   mundos:
     overworld:
