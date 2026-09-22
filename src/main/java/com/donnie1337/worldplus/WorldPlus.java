@@ -30,6 +30,7 @@ public final class WorldPlus extends JavaPlugin implements Listener {
     private TitleManager titleManager;
     private RtpManager rtpManager;
     private WorldTimeManager worldTimeManager;
+    private WorldResetManager worldResetManager;
 
     @Override
     public void onLoad() {
@@ -56,6 +57,10 @@ public final class WorldPlus extends JavaPlugin implements Listener {
             rtpManager.shutdown();
             rtpManager = null;
         }
+        if (worldResetManager != null) {
+            worldResetManager.stop();
+            worldResetManager = null;
+        }
     }
 
     @Override
@@ -78,6 +83,8 @@ public final class WorldPlus extends JavaPlugin implements Listener {
             }
         }
         worldTimeManager.start();
+        worldResetManager = new WorldResetManager(this);
+        worldResetManager.start();
         titleManager = new TitleManager(this);
         rtpManager = new RtpManager(this);
         RtpCommand rtpCommand = new RtpCommand(this, rtpManager);
@@ -163,6 +170,14 @@ public final class WorldPlus extends JavaPlugin implements Listener {
         return titleManager;
     }
 
+    public WorldResetManager getWorldResetManager() {
+        return worldResetManager;
+    }
+
+    public String color(String message) {
+        return org.bukkit.ChatColor.translateAlternateColorCodes('&', message);
+    }
+
 
     public World getDimensionWorld(String id, World.Environment environment) {
         WorldSettings settings = getSettings(id);
@@ -190,6 +205,11 @@ public final class WorldPlus extends JavaPlugin implements Listener {
                 .environment(settings.environment())
                 .seed(settings.seed())
                 .generateStructures(settings.structures());
+        try {
+            installStrongholdDatapack(settings);
+        } catch (IOException exception) {
+            getLogger().warning("Não foi possível preparar o datapack de '" + settings.id() + "': " + exception.getMessage());
+        }
         World world = creator.createWorld();
         if (world != null) {
             applySettings(world, settings);
@@ -340,8 +360,8 @@ public final class WorldPlus extends JavaPlugin implements Listener {
         }
     }
 
-    private static final class WorldDeletionException extends RuntimeException {
-        private WorldDeletionException(IOException cause) { super(cause); }
+    static final class WorldDeletionException extends RuntimeException {
+        WorldDeletionException(IOException cause) { super(cause); }
     }
 
     private void installStrongholdDatapack(WorldSettings settings) throws IOException {

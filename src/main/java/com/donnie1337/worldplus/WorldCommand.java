@@ -198,6 +198,24 @@ public final class WorldCommand implements CommandExecutor, TabCompleter {
                 sender.sendMessage(color(msg("recarregado", "&aConfiguração recarregada.")));
                 return true;
             }
+            case "reset" -> {
+                if (!sender.hasPermission("worldplus.admin")) return noPermission(sender);
+                if (args.length < 2) return usage(sender);
+                WorldSettings settings = plugin.getSettings(args[1]);
+                if (settings == null) return notFound(sender, args[1]);
+                if (settings.id().equalsIgnoreCase("overworld") || settings.name().equalsIgnoreCase("world")) {
+                    sender.sendMessage(color("&cO Overworld não pode ser resetado."));
+                    return true;
+                }
+                if (args.length < 3 || !args[2].equalsIgnoreCase("confirmar")) {
+                    sender.sendMessage(color("&eUse &f/mundos reset " + settings.id() + " confirmar &epara resetar este mundo agora."));
+                    return true;
+                }
+                boolean reset = plugin.getWorldResetManager() != null && plugin.getWorldResetManager().reset(settings.id());
+                sender.sendMessage(color(reset ? "&aMundo &f" + settings.id() + " &aresetado com sucesso."
+                        : "&cNão foi possível resetar o mundo &f" + settings.id() + "&c."));
+                return true;
+            }
             default -> { return usage(sender); }
         }
     }
@@ -340,7 +358,7 @@ public final class WorldCommand implements CommandExecutor, TabCompleter {
     }
 
     private boolean usage(CommandSender sender) {
-        sender.sendMessage(color(msg("uso", "&cUso: /mundos <lista|info|tp|borda|spawn|setspawn|criar|excluir|recarregar>")));
+        sender.sendMessage(color(msg("uso", "&cUso: /mundos <lista|info|tp|borda|spawn|setspawn|criar|excluir|reset|recarregar>")));
         return true;
     }
 
@@ -355,8 +373,8 @@ public final class WorldCommand implements CommandExecutor, TabCompleter {
     @Override
     public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] args) {
         if (!sender.hasPermission("worldplus.use")) return Collections.emptyList();
-        if (args.length == 1) return partial(List.of("lista", "info", "tp", "borda", "spawn", "setspawn", "criar", "excluir", "recarregar"), args[0]);
-        if (args.length == 2 && List.of("info", "tp", "borda", "spawn", "setspawn", "criar", "excluir").contains(args[0].toLowerCase())) {
+        if (args.length == 1) return partial(List.of("lista", "info", "tp", "borda", "spawn", "setspawn", "criar", "excluir", "reset", "recarregar"), args[0]);
+        if (args.length == 2 && List.of("info", "tp", "borda", "spawn", "setspawn", "criar", "excluir", "reset").contains(args[0].toLowerCase())) {
             if (args[0].equalsIgnoreCase("borda")) {
                 List<String> values = new ArrayList<>(plugin.getWorlds().keySet());
                 values.addAll(List.of("norte", "sul", "leste", "oeste"));
@@ -366,6 +384,9 @@ public final class WorldCommand implements CommandExecutor, TabCompleter {
         }
         if (args.length == 3 && args[0].equalsIgnoreCase("borda")) {
             return partial(List.of("norte", "sul", "leste", "oeste"), args[2]);
+        }
+        if (args.length == 3 && List.of("excluir", "reset").contains(args[0].toLowerCase())) {
+            return partial(List.of("confirmar"), args[2]);
         }
         if (args.length == 3 && args[0].equalsIgnoreCase("tp") && sender.hasPermission("worldplus.admin"))
             return partial(Bukkit.getOnlinePlayers().stream().map(Player::getName).toList(), args[2]);

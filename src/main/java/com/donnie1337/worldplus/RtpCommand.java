@@ -42,6 +42,7 @@ public final class RtpCommand implements CommandExecutor, TabCompleter, Listener
                 "rtp.gui.titulo", "&8Teleporte Aleatório"
         );
         Inventory inventory = Bukkit.createInventory(null, size, color(title));
+        addDecoration(inventory);
 
         for (WorldSettings settings : plugin.getWorlds().values()) {
             String path = "rtp.gui.mundos." + settings.id();
@@ -111,6 +112,22 @@ public final class RtpCommand implements CommandExecutor, TabCompleter, Listener
         }
 
         player.openInventory(inventory);
+    }
+
+    private void addDecoration(Inventory inventory) {
+        if (!plugin.getConfig().getBoolean("rtp.gui.decoracao.habilitada", true)) return;
+        Material material = material(plugin.getConfig().getString("rtp.gui.decoracao.material", "BLACK_STAINED_GLASS_PANE"),
+                Material.BLACK_STAINED_GLASS_PANE);
+        String name = color(plugin.getConfig().getString("rtp.gui.decoracao.nome", "&0"));
+        for (int slot = 0; slot < inventory.getSize(); slot++) {
+            ItemStack item = new ItemStack(material);
+            ItemMeta meta = item.getItemMeta();
+            if (meta != null) {
+                meta.setDisplayName(name);
+                item.setItemMeta(meta);
+            }
+            inventory.setItem(slot, item);
+        }
     }
 
     private Material material(String value, Material fallback) {

@@ -60,6 +60,17 @@ mundos:
     manter-inventario: true
     dificuldade: "HARD"
 
+# Apenas estes mundos são apagados e recriados automaticamente. O Overworld
+# não entra nesta lista e é bloqueado pelo código mesmo se for adicionado aqui.
+reset-mundos:
+  habilitado: true
+  intervalo-dias: 90
+  mundos:
+    - "mineracao"
+    - "nether"
+    - "end"
+  proximos-resets: {}
+
 rtp:
   # Temporário: registra todas as etapas do RTP no console.
   debug: true
@@ -113,7 +124,12 @@ rtp:
     tamanho: 27
 
     # Título do menu.
-    titulo: "&8Teleporte Aleatório"
+    titulo: "&0&lRTP &8• &fEscolha seu mundo"
+
+    decoracao:
+      habilitada: true
+      material: "BLACK_STAINED_GLASS_PANE"
+      nome: "&0"
 
     # Cada mundo pode definir material, nome, lore e slot.
     # Placeholders disponíveis na lore:
@@ -130,7 +146,7 @@ rtp:
           - "&8• &7Mundo: &f{mundo}"
           - "&8• &7Tamanho: &f{tamanho} blocos"
           - ""
-          - "&aClique para se teleportar."
+          - "&a&lCLIQUE PARA TELEPORTAR"
 
       mineracao:
         slot: 12
@@ -141,7 +157,7 @@ rtp:
           - "&8• &7Mundo: &f{mundo}"
           - "&8• &7Tamanho: &f{tamanho} blocos"
           - ""
-          - "&aClique para se teleportar."
+          - "&e&lCLIQUE PARA TELEPORTAR"
 
       nether:
         slot: 14
@@ -152,7 +168,7 @@ rtp:
           - "&8• &7Mundo: &f{mundo}"
           - "&8• &7Tamanho: &f{tamanho} blocos"
           - ""
-          - "&aClique para se teleportar."
+          - "&c&lCLIQUE PARA TELEPORTAR"
 
       end:
         slot: 16
@@ -163,7 +179,7 @@ rtp:
           - "&8• &7Mundo: &f{mundo}"
           - "&8• &7Tamanho: &f{tamanho} blocos"
           - ""
-          - "&aClique para se teleportar."
+          - "&5&lCLIQUE PARA TELEPORTAR"
 
   mundos:
     overworld:
@@ -373,7 +389,7 @@ mensagens:
   prefixo: "&7&lᴡᴏʀʟᴅᴘʟᴜs &8• &r"
   cooldown: "&cAguarde &f{tempo} segundos &cpara usar o teleporte novamente."
   sem-permissao: "&cVocê não tem permissão para executar este comando."
-  uso: "&cUso: /mundos <lista|info|tp|borda|spawn|setspawn|criar|excluir|recarregar>"
+  uso: "&cUso: /mundos <lista|info|tp|borda|spawn|setspawn|criar|excluir|reset|recarregar>"
   uso-borda: "&cUso: /mundos borda [mundo] [norte|sul|leste|oeste]"
   borda-teleporte: "&aTeleportado para a borda de &f{id}&a."
   borda-sem-local: "&cNão foi encontrado um local seguro próximo à borda de &f{id}&c."
