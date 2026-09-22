@@ -304,9 +304,15 @@ public final class RtpManager implements Listener {
     @EventHandler public void onQuit(PlayerQuitEvent e) { clear(e.getPlayer()); cooldowns.remove(e.getPlayer().getUniqueId()); }
     public void shutdown() { pending.clear(); }
     private void clear(Player p) { pending.remove(p.getUniqueId()); if (plugin.getTitleManager() != null) plugin.getTitleManager().endRtpTitle(p); }
-    private void debug(String message) {\n        if (plugin.getConfig().getBoolean("rtp.debug", false)) {\n            plugin.getLogger().info("[RTP DEBUG] " + message);\n        }\n    }\n\n    private void debug(Player player, String message) {
-        if (plugin.getConfig().getBoolean("rtp.debug", true)) {
-            debug("[RTP DEBUG] " + player.getName() + " • " + message);
+    private void debug(String message) {
+        if (plugin.getConfig().getBoolean("rtp.debug", false)) {
+            plugin.getLogger().info("[RTP DEBUG] " + message);
+        }
+    }
+
+    private void debug(Player player, String message) {
+        if (plugin.getConfig().getBoolean("rtp.debug", false)) {
+            debug(player.getName() + " • " + message);
         }
     }
 
