@@ -298,17 +298,17 @@ titles:
     windswept_hills:
       mensagem: "&fᴍᴏɴᴛᴀɴʜᴀs"
     windswept_forest:
-      mensagem: "&fVocê está na &fFloresta Montanhosa"
+      mensagem: "&fғʟᴏʀᴇsᴛᴀ ᴍᴏɴᴛᴀɴʜᴏsᴀ"
     windswept_gravelly_hills:
-      mensagem: "&fVocê está nas &fColinas Rochosas"
+      mensagem: "&fᴄᴏʟɪɴᴀs ʀᴏᴄʜᴏsᴀs"
     windswept_savanna:
-      mensagem: "&fVocê está na &fSavanna Montanhosa"
+      mensagem: "&f sᴀᴠᴀɴɴᴀ ᴍᴏɴᴛᴀɴʜᴏsᴀ"
     jagged_peaks:
-      mensagem: "&fVocê está nos &fPicos Escarpados"
+      mensagem: "&fᴘɪᴄᴏs ᴇsᴄᴀʀᴘᴀᴅᴏs"
     frozen_peaks:
-      mensagem: "&fVocê está nos &fPicos Congelados"
+      mensagem: "&fᴘɪᴄᴏs ᴄᴏɴɢᴇʟᴀᴅᴏs"
     stony_peaks:
-      mensagem: "&fVocê está nos &fPicos Rochosos"
+      mensagem: "&fᴘɪᴄᴏs ʀᴏᴄʜᴏsᴏs"
     ocean:
       mensagem: "&fᴏᴄᴇᴀɴᴏ"
     deep_ocean:
@@ -322,17 +322,17 @@ titles:
     river:
       mensagem: "&fʀɪᴏ"
     frozen_river:
-      mensagem: "&fVocê está no &fRio Congelado"
+      mensagem: "&fʀɪᴏ ᴄᴏɴɢᴇʟᴀᴅᴏ"
     beach:
       mensagem: "&fᴘʀᴀɪᴀ"
     stony_shore:
-      mensagem: "&fVocê está na &fCosta Rochosa"
+      mensagem: "&fᴄᴏsᴛᴀ ʀᴏᴄʜᴏsᴀ"
     badlands:
       mensagem: "&fʙᴀᴅʟᴀɴᴅs"
     wooded_badlands:
-      mensagem: "&fVocê está nas &fBadlands Arborizadas"
+      mensagem: "&fʙᴀᴅʟᴀɴᴅs ᴀʀʙᴏʀɪᴢᴀᴅᴀs"
     eroded_badlands:
-      mensagem: "&fVocê está nas &fBadlands Erodidas"
+      mensagem: "&fʙᴀᴅʟᴀɴᴅs ᴇʀᴏᴅɪᴅᴀs"
     mushroom_fields:
       mensagem: "&fᴄᴀᴍᴘᴏs ᴅᴇ ᴄᴏɢᴜᴍᴇʟᴏs"
     ice_spikes:
@@ -340,17 +340,17 @@ titles:
     dark_forest:
       mensagem: "&fғʟᴏʀᴇsᴛᴀ ᴇsᴄᴜʀᴀ"
     birch_forest:
-      mensagem: "&fVocê está na &fFloresta de Bétulas"
+      mensagem: "&fғʟᴏʀᴇsᴛᴀ ᴅᴇ ʙᴇᴛᴜʟᴀs"
     flower_forest:
       mensagem: "&fғʟᴏʀᴇsᴛᴀ ᴅᴇ ғʟᴏʀᴇs"
     sparse_jungle:
-      mensagem: "&fVocê está na &fSelva Esparsa"
+      mensagem: "&f sᴇʟᴠᴀ ᴇsᴘᴀʀsᴀ"
     old_growth_pine_taiga:
-      mensagem: "&fVocê está na &fTaiga de Pinheiros Antigos"
+      mensagem: "&fᴛᴀɪɢᴀ ᴅᴇ ᴘɪɴʜᴇɪʀᴏs ᴀɴᴛɪɢᴏs"
     old_growth_spruce_taiga:
-      mensagem: "&fVocê está na &fTaiga de Abetos Antigos"
+      mensagem: "&fᴛᴀɪɢᴀ ᴅᴇ ᴀʙᴇᴛᴏs ᴀɴᴛɪɢᴏs"
     sunflower_plains:
-      mensagem: "&fVocê está nas &fPlanícies de Girassóis"
+      mensagem: "&fᴘʟᴀɴɪᴄɪᴇs ᴅᴇ ɢɪʀᴀssᴏɪs"
     deep_dark:
       mensagem: "&fᴇsᴄᴜʀɪᴅᴀᴏ ᴘʀᴏғᴜɴᴅᴀ"
     dripstone_caves:
@@ -378,27 +378,29 @@ titles:
     end_barrens:
       mensagem: "&fᴇʀᴍᴏs ᴅᴏ ғɪᴍ"
     deep_cold_ocean:
-      mensagem: "&fVocê está no &fOceano Profundo Frio"
+      mensagem: "&fᴏᴄᴇᴀɴᴏ ᴘʀᴏғᴜɴᴅᴏ ғʀɪᴏ"
     deep_frozen_ocean:
-      mensagem: "&fVocê está no &fOceano Profundo Congelado"
+      mensagem: "&fᴏᴄᴇᴀɴᴏ ᴘʀᴏғᴜɴᴅᴏ ᴄᴏɴɢᴇʟᴀᴅᴏ"
     deep_lukewarm_ocean:
-      mensagem: "&fVocê está no &fOceano Profundo Morno"
+      mensagem: "&fᴏᴄᴇᴀɴᴏ ᴘʀᴏғᴜɴᴅᴏ ᴍᴏʀɴᴏ"
     lukewarm_ocean:
-      mensagem: "&fVocê está no &fOceano Morno"
+      mensagem: "&fᴏᴄᴇᴀɴᴏ ᴍᴏʀɴᴏ"
     old_growth_birch_forest:
-      mensagem: "&fVocê está na &fFloresta de Bétulas Antigas"
+      mensagem: "&fғʟᴏʀᴇsᴛᴀ ᴅᴇ ʙᴇᴛᴜʟᴀs ᴀɴᴛɪɢᴀs"
     pale_garden:
       mensagem: "&fᴊᴀʀᴅɪᴍ ᴘᴀʟɪᴅᴏ"
+    dappled_forest:
+      mensagem: "&fғʟᴏʀᴇsᴛᴀ sᴀʟᴘɪᴄᴀᴅᴀ"
     savanna_plateau:
-      mensagem: "&fVocê está no &fPlanalto de Savanna"
+      mensagem: "&fᴘʟᴀɴᴀʟᴛᴏ ᴅᴇ sᴀᴠᴀɴɴᴀ"
     snowy_beach:
-      mensagem: "&fVocê está na &fPraia Nevada"
+      mensagem: "&fᴘʀᴀɪᴀ ɴᴇᴠᴀᴅᴀ"
     snowy_slopes:
       mensagem: "&fᴇɴᴄᴏsᴛᴀs ɴᴇᴠᴀᴅᴀs"
     sulfur_caves:
-      mensagem: "&fVocê está nas &fCavernas de Enxofre"
+      mensagem: "&fᴄᴀᴠᴇʀɴᴀs ᴅᴇ ᴇɴxᴏғʀᴇ"
     the_void:
-      mensagem: "&fVocê está no &fO Vazio"
+      mensagem: "&fᴏ ᴠᴀᴢɪᴏ"
 
 mensagens:
   prefixo: "&7&lᴡᴏʀʟᴅᴘʟᴜs &8• &r"
