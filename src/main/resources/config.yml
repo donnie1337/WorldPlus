@@ -73,7 +73,7 @@ reset-mundos:
 
 rtp:
   # Temporário: registra todas as etapas do RTP no console.
-  debug: true
+  debug: false
 
   geral:
     atraso-segundos: 3
