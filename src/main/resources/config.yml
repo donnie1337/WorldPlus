@@ -176,7 +176,7 @@ rtp:
           - "&e▪ &7Tamanho: &a{tamanho}"
           - "&e▪ &7Reset: &eA cada 90 dias"
           - "&e▪ &7Proteção: &aSim"
-          - "&e▪ &7PvP: &eOpcional &8(/pvp)"
+          - "&e▪ &7PvP: &cAtivado &8(Cuidado)"
           - ""
           - "&cClique para explorar."
 
@@ -192,7 +192,7 @@ rtp:
           - "&e▪ &7Tamanho: &a{tamanho}"
           - "&e▪ &7Reset: &eA cada 90 dias"
           - "&e▪ &7Proteção: &aSim"
-          - "&e▪ &7PvP: &eOpcional &8(/pvp)"
+          - "&e▪ &7PvP: &cAtivado &8(Cuidado)"
           - ""
           - "&5Clique para explorar."
 
