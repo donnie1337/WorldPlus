@@ -100,6 +100,8 @@ public final class RtpCommand implements CommandExecutor, TabCompleter, Listener
                 );
             }
 
+            lore = enforcePvpLore(settings, lore);
+
             List<String> finalLore = lore.stream()
                     .map(line -> line
                             .replace("{mundo}", displayWorldName(settings))
@@ -115,6 +117,31 @@ public final class RtpCommand implements CommandExecutor, TabCompleter, Listener
         }
 
         player.openInventory(inventory);
+    }
+
+    private List<String> enforcePvpLore(WorldSettings settings, List<String> configuredLore) {
+        if (settings.environment() != org.bukkit.World.Environment.NETHER
+                && settings.environment() != org.bukkit.World.Environment.THE_END) {
+            return configuredLore;
+        }
+
+        List<String> lore = new ArrayList<>(configuredLore);
+        String forcedPvpLine = "&e▪ &7PvP: &cAtivado &8(Cuidado)";
+        boolean replaced = false;
+
+        for (int index = 0; index < lore.size(); index++) {
+            String line = lore.get(index);
+            if (line != null && line.toLowerCase(Locale.ROOT).contains("pvp:")) {
+                lore.set(index, forcedPvpLine);
+                replaced = true;
+            }
+        }
+
+        if (!replaced) {
+            lore.add(forcedPvpLine);
+        }
+
+        return lore;
     }
 
     private Material material(String value, Material fallback) {
