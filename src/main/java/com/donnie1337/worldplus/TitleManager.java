@@ -2,6 +2,8 @@ package com.donnie1337.worldplus;
 
 import org.bukkit.ChatColor;
 import org.bukkit.Location;
+import org.bukkit.Chunk;
+import org.bukkit.NamespacedKey;
 import org.bukkit.block.Biome;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
@@ -9,6 +11,7 @@ import org.bukkit.event.Listener;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerMoveEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
+import org.bukkit.persistence.PersistentDataType;
 
 import java.util.HashMap;
 import java.util.Set;
@@ -23,6 +26,8 @@ public final class TitleManager implements Listener {
     private final Map<UUID, Boolean> firstRtpTitleShown = new HashMap<>();
     private final Map<UUID, Boolean> rtpTitleActive = new HashMap<>();
     private final Map<UUID, String> lastShownImportantBiome = new HashMap<>();
+    private final Map<UUID, String> lastStructure = new HashMap<>();
+    private final NamespacedKey structureKey;
     private static final Set<String> IMPORTANT_BIOMES = Set.of(
             "plains", "sunflower_plains", "forest", "flower_forest", "dark_forest",
             "taiga", "snowy_plains", "cherry_grove", "jungle", "bamboo_jungle",
@@ -36,6 +41,7 @@ public final class TitleManager implements Listener {
 
     public TitleManager(WorldPlus plugin) {
         this.plugin = plugin;
+        this.structureKey = new NamespacedKey(plugin, "generated-structure");
     }
 
     public void showRtpPreparing(Player player) {
@@ -92,6 +98,65 @@ public final class TitleManager implements Listener {
         Biome biome = location.getWorld().getBiome(location);
         lastBiomes.put(player.getUniqueId(), biome.getKey().toString());
         sendBiomeTitle(player, biome);
+        plugin.getServer().getScheduler().runTaskLater(plugin, () -> showStructureAt(player, location), 2L);
+    }
+
+    /**
+     * Exibe o aviso quando uma construção foi gerada no chunk em que o jogador está.
+     */
+    public void announceStructure(Chunk chunk, String structure) {
+        if (chunk == null || structure == null) return;
+        for (Player player : chunk.getWorld().getPlayers()) {
+            Chunk playerChunk = player.getChunk();
+            if (playerChunk.getX() == chunk.getX() && playerChunk.getZ() == chunk.getZ()) {
+                showStructure(player, chunk, structure);
+            }
+        }
+    }
+
+    public void showStructureAt(Player player, Location location) {
+        if (player == null || !player.isOnline() || location == null) return;
+        Chunk chunk = location.getChunk();
+        String structure = chunk.getPersistentDataContainer().get(structureKey, PersistentDataType.STRING);
+        if (structure == null || structure.isBlank()) {
+            lastStructure.remove(player.getUniqueId());
+            return;
+        }
+        showStructure(player, chunk, structure);
+    }
+
+    private void showStructure(Player player, Chunk chunk, String structure) {
+        if (!plugin.getConfig().getBoolean("titles.construcoes.habilitado", true)) return;
+        String key = chunk.getWorld().getName() + ":" + chunk.getX() + ":" + chunk.getZ() + ":" + structure;
+        UUID uuid = player.getUniqueId();
+        if (key.equals(lastStructure.get(uuid))) return;
+        lastStructure.put(uuid, key);
+
+        String title = plugin.getConfig().getString(
+                "titles.construcoes." + structure + ".titulo",
+                "&f" + structureDisplayName(structure));
+        String subtitle = plugin.getConfig().getString(
+                "titles.construcoes." + structure + ".subtitulo",
+                "&7Você encontrou uma construção especial");
+        sendTitle(player, title, subtitle, "titles.construcoes");
+    }
+
+    private String structureDisplayName(String structure) {
+        return switch (structure) {
+            case "posto-avancado" -> "Posto Avançado";
+            case "ruina-antiga" -> "Ruína Antiga";
+            case "templo-da-floresta" -> "Templo da Floresta";
+            case "mina-abandonada" -> "Mina Abandonada";
+            case "pedreira" -> "Pedreira";
+            case "cidade-subterranea" -> "Cidade Subterrânea";
+            case "acampamento-piglin" -> "Acampamento Piglin";
+            case "santuario-das-almas" -> "Santuário das Almas";
+            case "arena-do-nether" -> "Arena do Nether";
+            case "torre-do-end" -> "Torre do End";
+            case "templo-do-vazio" -> "Templo do Vazio";
+            case "santuario-dos-shulkers" -> "Santuário dos Shulkers";
+            default -> "Construção Especial";
+        };
     }
 
     private void sendBiomeTitle(Player player, Biome biome) {
@@ -166,6 +231,7 @@ public final class TitleManager implements Listener {
                 && from.getBlockZ() == to.getBlockZ()) return;
 
         showBiome(event.getPlayer(), to);
+        showStructureAt(event.getPlayer(), to);
     }
 
     @EventHandler
@@ -173,6 +239,7 @@ public final class TitleManager implements Listener {
         UUID uuid = event.getPlayer().getUniqueId();
         lastBiomes.remove(uuid);
         lastShownImportantBiome.remove(uuid);
+        lastStructure.remove(uuid);
         firstRtpTitleShown.remove(uuid);
         rtpTitleActive.remove(uuid);
     }
