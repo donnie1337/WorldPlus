@@ -63,22 +63,22 @@ mundos:
 # ------------------------------------------------------------
 # Construções personalizadas por mundo
 # São planejadas e geradas uma única vez durante a criação/carregamento
-# do mundo. O RTP não cria construções novas.
+# do mundo. O RTP não cria construções novas. Cada mundo recebe 30 construções.
 construcoes:
   habilitado: true
   mundos:
     overworld:
       habilitado: true
-      quantidade: 12
+      quantidade: 30
     mineracao:
       habilitado: true
-      quantidade: 12
+      quantidade: 30
     nether:
       habilitado: true
-      quantidade: 12
+      quantidade: 30
     end:
       habilitado: true
-      quantidade: 12
+      quantidade: 30
 
 # Apenas estes mundos são apagados e recriados automaticamente. O Overworld
 # não entra nesta lista e é bloqueado pelo código mesmo se for adicionado aqui.
