@@ -23,7 +23,7 @@ import java.util.Set;
  * construções.
  */
 public final class WorldStructureGenerator {
-    private static final String GENERATION_VERSION = "fixed-structures-v2";
+    private static final String GENERATION_VERSION = "fixed-structures-v3";
 
     private final WorldPlus plugin;
     private final NamespacedKey structureKey;
