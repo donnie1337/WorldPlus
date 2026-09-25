@@ -23,7 +23,7 @@ import java.util.Set;
  * construções.
  */
 public final class WorldStructureGenerator {
-    private static final String GENERATION_VERSION = "fixed-structures-v4";
+    private static final String GENERATION_VERSION = "fixed-structures-v5";
 
     private final WorldPlus plugin;
     private final NamespacedKey structureKey;
@@ -61,7 +61,7 @@ public final class WorldStructureGenerator {
 
     private List<PlannedStructure> plan(WorldSettings settings) {
         String path = "construcoes.mundos." + settings.id();
-        int amount = Math.max(1, plugin.getConfig().getInt(path + ".quantidade", 12));
+        int amount = Math.max(1, plugin.getConfig().getInt(path + ".quantidade", 30));
         double halfBorder = Math.max(256.0D, settings.size() / 2.0D - 256.0D);
         Random random = new Random(settings.seed() ^ settings.id().hashCode());
         List<PlannedStructure> result = new ArrayList<>();
