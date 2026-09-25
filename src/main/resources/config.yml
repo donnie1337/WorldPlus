@@ -60,6 +60,27 @@ mundos:
     manter-inventario: true
     dificuldade: "HARD"
 
+# ------------------------------------------------------------
+# Construções personalizadas por mundo
+# São geradas somente em chunks novos e nunca reaplicadas em chunks existentes.
+# A chance é por chunk; diminua os valores em servidores com exploração intensa.
+construcoes:
+  habilitado: true
+  chance-por-chunk: 0.0125
+  mundos:
+    overworld:
+      habilitado: true
+      chance-por-chunk: 0.0125
+    mineracao:
+      habilitado: true
+      chance-por-chunk: 0.018
+    nether:
+      habilitado: true
+      chance-por-chunk: 0.015
+    end:
+      habilitado: true
+      chance-por-chunk: 0.0125
+
 # Apenas estes mundos são apagados e recriados automaticamente. O Overworld
 # não entra nesta lista e é bloqueado pelo código mesmo se for adicionado aqui.
 reset-mundos:
