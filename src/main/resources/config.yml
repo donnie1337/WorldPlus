@@ -62,24 +62,23 @@ mundos:
 
 # ------------------------------------------------------------
 # Construções personalizadas por mundo
-# São geradas somente em chunks novos e nunca reaplicadas em chunks existentes.
-# A chance é por chunk; diminua os valores em servidores com exploração intensa.
+# São planejadas e geradas uma única vez durante a criação/carregamento
+# do mundo. O RTP não cria construções novas.
 construcoes:
   habilitado: true
-  chance-por-chunk: 0.0125
   mundos:
     overworld:
       habilitado: true
-      chance-por-chunk: 0.0125
+      quantidade: 12
     mineracao:
       habilitado: true
-      chance-por-chunk: 0.018
+      quantidade: 12
     nether:
       habilitado: true
-      chance-por-chunk: 0.015
+      quantidade: 12
     end:
       habilitado: true
-      chance-por-chunk: 0.0125
+      quantidade: 12
 
 # Apenas estes mundos são apagados e recriados automaticamente. O Overworld
 # não entra nesta lista e é bloqueado pelo código mesmo se for adicionado aqui.
