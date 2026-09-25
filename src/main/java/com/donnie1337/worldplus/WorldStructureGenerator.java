@@ -2,6 +2,7 @@ package com.donnie1337.worldplus;
 
 import org.bukkit.Chunk;
 import org.bukkit.Material;
+import org.bukkit.NamespacedKey;
 import org.bukkit.World;
 import org.bukkit.block.Block;
 import org.bukkit.block.Chest;
@@ -10,6 +11,7 @@ import org.bukkit.event.Listener;
 import org.bukkit.event.world.ChunkLoadEvent;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.plugin.java.JavaPlugin;
+import org.bukkit.persistence.PersistentDataType;
 
 import java.util.Map;
 import java.util.Random;
@@ -22,9 +24,11 @@ import java.util.Random;
  */
 public final class WorldStructureGenerator implements Listener {
     private final WorldPlus plugin;
+    private final NamespacedKey structureKey;
 
     public WorldStructureGenerator(JavaPlugin plugin) {
         this.plugin = (WorldPlus) plugin;
+        this.structureKey = new NamespacedKey(this.plugin, "generated-structure");
     }
 
     @EventHandler
@@ -46,11 +50,17 @@ public final class WorldStructureGenerator implements Listener {
         int z = chunk.getZ() * 16 + 2;
         int baseY = baseY(world, x + 6, z + 6);
         if (!validBase(world, id, x + 6, baseY - 1, z + 6)) return;
+        int variant = random.nextInt(3);
+        String structure = structureName(id, variant);
 
         // Aguarda o tick seguinte para não alongar o carregamento síncrono do chunk.
         plugin.getServer().getScheduler().runTask(plugin, () -> {
             if (!chunk.isLoaded()) return;
-            generate(id, world, x, baseY, z, random);
+            generate(id, world, x, baseY, z, variant, random);
+            chunk.getPersistentDataContainer().set(structureKey, PersistentDataType.STRING, structure);
+            if (plugin.getTitleManager() != null) {
+                plugin.getTitleManager().announceStructure(chunk, structure);
+            }
         });
     }
 
@@ -95,8 +105,17 @@ public final class WorldStructureGenerator implements Listener {
         return true;
     }
 
-    private void generate(String id, World world, int x, int y, int z, Random random) {
-        int variant = random.nextInt(3);
+    private String structureName(String id, int variant) {
+        return switch (id) {
+            case "overworld" -> variant == 0 ? "posto-avancado" : variant == 1 ? "ruina-antiga" : "templo-da-floresta";
+            case "mineracao" -> variant == 0 ? "mina-abandonada" : variant == 1 ? "pedreira" : "cidade-subterranea";
+            case "nether" -> variant == 0 ? "acampamento-piglin" : variant == 1 ? "santuario-das-almas" : "arena-do-nether";
+            case "end" -> variant == 0 ? "torre-do-end" : variant == 1 ? "templo-do-vazio" : "santuario-dos-shulkers";
+            default -> "construcao";
+        };
+    }
+
+    private void generate(String id, World world, int x, int y, int z, int variant, Random random) {
         switch (id) {
             case "overworld" -> {
                 if (variant == 0) buildOverworldOutpost(world, x, y, z);
