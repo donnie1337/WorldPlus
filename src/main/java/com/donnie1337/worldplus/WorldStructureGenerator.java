@@ -6,82 +6,134 @@ import org.bukkit.NamespacedKey;
 import org.bukkit.World;
 import org.bukkit.block.Block;
 import org.bukkit.block.Chest;
-import org.bukkit.event.EventHandler;
-import org.bukkit.event.Listener;
-import org.bukkit.event.world.ChunkLoadEvent;
 import org.bukkit.inventory.ItemStack;
-import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.persistence.PersistentDataType;
 
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Random;
+import java.util.Set;
 
 /**
- * Gera construções pequenas e determinísticas em chunks novos.
- *
- * As estruturas ficam limitadas ao próprio chunk para não depender de chunks
- * vizinhos e nunca são reaplicadas em chunks que já existiam antes do plugin.
+ * Planeja construções fixas para cada mundo e gera os chunks necessários uma
+ * única vez. O RTP apenas encontra locais já existentes; ele não dispara novas
+ * construções.
  */
-public final class WorldStructureGenerator implements Listener {
+public final class WorldStructureGenerator {
+    private static final String GENERATION_VERSION = "fixed-structures-v2";
+
     private final WorldPlus plugin;
     private final NamespacedKey structureKey;
+    private final NamespacedKey worldGenerationKey;
 
-    public WorldStructureGenerator(JavaPlugin plugin) {
-        this.plugin = (WorldPlus) plugin;
-        this.structureKey = new NamespacedKey(this.plugin, "generated-structure");
+    public WorldStructureGenerator(WorldPlus plugin) {
+        this.plugin = plugin;
+        this.structureKey = new NamespacedKey(plugin, "generated-structure");
+        this.worldGenerationKey = new NamespacedKey(plugin, "structures-generation");
     }
 
-    @EventHandler
-    public void onChunkLoad(ChunkLoadEvent event) {
-        if (!event.isNewChunk()) return;
-        Chunk chunk = event.getChunk();
-        World world = chunk.getWorld();
-        String id = worldId(world);
-        if (id == null || !enabled(id)) return;
-
-        Random random = new Random(seed(world, chunk));
-        double chance = plugin.getConfig().getDouble(
-                "construcoes.mundos." + id + ".chance-por-chunk",
-                plugin.getConfig().getDouble("construcoes.chance-por-chunk", 0.0125D)
-        );
-        if (random.nextDouble() >= Math.max(0.0D, Math.min(1.0D, chance))) return;
-
-        int x = chunk.getX() * 16 + 2;
-        int z = chunk.getZ() * 16 + 2;
-        int baseY = baseY(world, x + 6, z + 6);
-        if (!validBase(world, id, x + 6, baseY - 1, z + 6)) return;
-        int variant = random.nextInt(3);
-        String structure = structureName(id, variant);
-
-        // Aguarda o tick seguinte para não alongar o carregamento síncrono do chunk.
-        plugin.getServer().getScheduler().runTask(plugin, () -> {
-            if (!chunk.isLoaded()) return;
-            generate(id, world, x, baseY, z, variant, random);
-            chunk.getPersistentDataContainer().set(structureKey, PersistentDataType.STRING, structure);
-            if (plugin.getTitleManager() != null) {
-                plugin.getTitleManager().announceStructure(chunk, structure);
-            }
-        });
-    }
-
-    private boolean enabled(String id) {
-        if (!plugin.getConfig().getBoolean("construcoes.habilitado", true)) return false;
-        return plugin.getConfig().getBoolean("construcoes.mundos." + id + ".habilitado", true);
-    }
-
-    private String worldId(World world) {
-        for (Map.Entry<String, WorldSettings> entry : plugin.getWorlds().entrySet()) {
-            if (entry.getValue().name().equals(world.getName())) return entry.getKey();
+    public void generateWorld(WorldSettings settings, World world) {
+        if (settings == null || world == null) return;
+        String id = settings.id();
+        if (!plugin.getConfig().getBoolean("construcoes.habilitado", true)
+                || !plugin.getConfig().getBoolean("construcoes.mundos." + id + ".habilitado", true)) {
+            return;
         }
-        return null;
+
+        String version = world.getPersistentDataContainer().get(worldGenerationKey, PersistentDataType.STRING);
+        if (GENERATION_VERSION.equals(version)) return;
+
+        List<PlannedStructure> plan = plan(settings);
+        if (plan.isEmpty()) {
+            markWorldComplete(world);
+            return;
+        }
+
+        plugin.getLogger().info("WorldPlus: planejando " + plan.size()
+                + " construções fixas no mundo " + id + ".");
+        generateNext(settings, world, plan, 0);
     }
 
-    private long seed(World world, Chunk chunk) {
-        long value = world.getSeed();
-        value ^= (long) chunk.getX() * 341873128712L;
-        value ^= (long) chunk.getZ() * 132897987541L;
-        return value ^ 0x5DEECE66DL;
+    private List<PlannedStructure> plan(WorldSettings settings) {
+        String path = "construcoes.mundos." + settings.id();
+        int amount = Math.max(1, plugin.getConfig().getInt(path + ".quantidade", 12));
+        double halfBorder = Math.max(256.0D, settings.size() / 2.0D - 256.0D);
+        Random random = new Random(settings.seed() ^ settings.id().hashCode());
+        List<PlannedStructure> result = new ArrayList<>();
+        Set<Long> usedChunks = new HashSet<>();
+
+        for (int index = 0; index < amount; index++) {
+            double angle = index * 2.399963229728653D;
+            double radius = halfBorder * (0.22D + 0.68D * ((index + 1.0D) / amount));
+            radius *= 0.90D + random.nextDouble() * 0.20D;
+            int blockX = (int) Math.round(Math.cos(angle) * radius);
+            int blockZ = (int) Math.round(Math.sin(angle) * radius);
+            int chunkX = blockX >> 4;
+            int chunkZ = blockZ >> 4;
+            long key = (((long) chunkX) << 32) ^ (chunkZ & 0xffffffffL);
+            if (!usedChunks.add(key)) continue;
+            result.add(new PlannedStructure(chunkX, chunkZ, index % 3));
+        }
+        return result;
     }
+
+    private void generateNext(WorldSettings settings, World world,
+                              List<PlannedStructure> plan, int index) {
+        if (index >= plan.size()) {
+            markWorldComplete(world);
+            plugin.getLogger().info("WorldPlus: construções fixas concluídas em " + settings.id() + ".");
+            return;
+        }
+
+        PlannedStructure planned = plan.get(index);
+        boolean requested = RtpChunkLoader.request(plugin, world, planned.chunkX(), planned.chunkZ(), ready -> {
+            if (ready) placePlanned(settings, world, planned);
+            plugin.getServer().getScheduler().runTaskLater(plugin,
+                    () -> generateNext(settings, world, plan, index + 1), 2L);
+        });
+
+        if (!requested) {
+            plugin.getServer().getScheduler().runTaskLater(plugin,
+                    () -> generateNext(settings, world, plan, index + 1), 2L);
+        }
+    }
+
+    private void placePlanned(WorldSettings settings, World world, PlannedStructure planned) {
+        Chunk chunk = world.getChunkAt(planned.chunkX(), planned.chunkZ(), false);
+        if (chunk == null || !chunk.isGenerated()) return;
+
+        String structure = structureName(settings.id(), planned.variant());
+        String existing = chunk.getPersistentDataContainer().get(structureKey, PersistentDataType.STRING);
+        if (existing != null && !existing.isBlank()) return;
+
+        int originX = planned.chunkX() * 16 + 2;
+        int originZ = planned.chunkZ() * 16 + 2;
+        int baseY = baseY(world, originX + 6, originZ + 6);
+        if (!validBase(world, settings.id(), originX + 6, baseY - 1, originZ + 6)) {
+            plugin.getLogger().fine("WorldPlus: terreno inválido para " + structure
+                    + " em " + world.getName() + " " + planned.chunkX() + "," + planned.chunkZ());
+            return;
+        }
+
+        Random random = new Random(world.getSeed()
+                ^ ((long) planned.chunkX() * 341873128712L)
+                ^ ((long) planned.chunkZ() * 132897987541L));
+        generate(settings.id(), world, originX, baseY, originZ, planned.variant(), random);
+        chunk.getPersistentDataContainer().set(structureKey, PersistentDataType.STRING, structure);
+        if (plugin.getTitleManager() != null) {
+            plugin.getTitleManager().announceStructure(chunk, structure);
+        }
+    }
+
+    private void markWorldComplete(World world) {
+        world.getPersistentDataContainer().set(
+                worldGenerationKey, PersistentDataType.STRING, GENERATION_VERSION);
+        world.save();
+    }
+
+    private record PlannedStructure(int chunkX, int chunkZ, int variant) {}
 
     private int baseY(World world, int x, int z) {
         if (world.getEnvironment() == World.Environment.NETHER) {
