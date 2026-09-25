@@ -173,6 +173,10 @@ public final class WorldPlus extends JavaPlugin implements Listener {
         return titleManager;
     }
 
+    public WorldStructureGenerator getStructureGenerator() {
+        return structureGenerator;
+    }
+
     public WorldResetManager getWorldResetManager() {
         return worldResetManager;
     }
