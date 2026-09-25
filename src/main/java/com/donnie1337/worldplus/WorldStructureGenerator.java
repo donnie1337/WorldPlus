@@ -4,15 +4,16 @@ import org.bukkit.Chunk;
 import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
 import org.bukkit.World;
+import org.bukkit.block.Biome;
 import org.bukkit.block.Block;
 import org.bukkit.block.Chest;
+import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.persistence.PersistentDataType;
 
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Random;
 import java.util.Set;
 
@@ -108,24 +109,210 @@ public final class WorldStructureGenerator {
         String existing = chunk.getPersistentDataContainer().get(structureKey, PersistentDataType.STRING);
         if (existing != null && !existing.isBlank()) return;
 
-        int originX = planned.chunkX() * 16 + 2;
-        int originZ = planned.chunkZ() * 16 + 2;
-        int baseY = baseY(world, originX + 6, originZ + 6);
-        if (!validBase(world, settings.id(), originX + 6, baseY - 1, originZ + 6)) {
-            plugin.getLogger().fine("WorldPlus: terreno inválido para " + structure
-                    + " em " + world.getName() + " " + planned.chunkX() + "," + planned.chunkZ());
+        Random random = new Random(world.getSeed()
+                ^ ((long) planned.chunkX() * 341873128712L)
+                ^ ((long) planned.chunkZ() * 132897987541L)
+                ^ (long) planned.variant() * 104729L);
+        int footprint = footprint(settings.id(), planned.variant());
+        int centerX = planned.chunkX() * 16 + 8;
+        int centerZ = planned.chunkZ() * 16 + 8;
+        Site site = findSite(world, settings.id(), centerX, centerZ, footprint);
+        if (site == null) {
+            plugin.getLogger().fine("WorldPlus: terreno inválido/irregular para " + structure
+                    + " em " + world.getName() + " " + planned.chunkX() + "," + planned.chunkZ()
+                    + "; estrutura ignorada para não ficar flutuando.");
             return;
         }
 
-        Random random = new Random(world.getSeed()
-                ^ ((long) planned.chunkX() * 341873128712L)
-                ^ ((long) planned.chunkZ() * 132897987541L));
-        generate(settings.id(), world, originX, baseY, originZ, planned.variant(), random);
+        MaterialPalette palette = palette(world, settings.id(), site.originX() + footprint / 2,
+                site.baseY() - 1, site.originZ() + footprint / 2);
+        prepareFoundation(world, site, footprint, palette.foundation());
+        generate(settings.id(), world, site.originX(), site.baseY(), site.originZ(), planned.variant(), random);
+        decorateSite(world, settings.id(), site, footprint, palette, planned.variant(), random);
+        populateChests(world, settings.id(), site, footprint, random);
+
         chunk.getPersistentDataContainer().set(structureKey, PersistentDataType.STRING, structure);
         if (plugin.getTitleManager() != null) {
             plugin.getTitleManager().announceStructure(chunk, structure);
         }
     }
+
+    private int footprint(String id, int variant) {
+        return switch (id) {
+            case "overworld" -> variant == 2 ? 10 : 12;
+            case "mineracao" -> 12;
+            case "nether" -> variant == 1 ? 10 : 12;
+            case "end" -> variant == 2 ? 10 : 12;
+            default -> 12;
+        };
+    }
+
+    private Site findSite(World world, String id, int centerX, int centerZ, int footprint) {
+        int[][] offsets = {
+                {0, 0}, {2, 0}, {-2, 0}, {0, 2}, {0, -2},
+                {3, 3}, {-3, 3}, {3, -3}, {-3, -3}
+        };
+        for (int[] offset : offsets) {
+            int originX = centerX - footprint / 2 + offset[0];
+            int originZ = centerZ - footprint / 2 + offset[1];
+            int minGround = Integer.MAX_VALUE;
+            int maxGround = Integer.MIN_VALUE;
+            boolean valid = true;
+            for (int x = originX; x < originX + footprint && valid; x++) {
+                for (int z = originZ; z < originZ + footprint; z++) {
+                    int ground = surfaceY(world, x, z);
+                    if (ground <= world.getMinHeight()
+                            || ground >= world.getMaxHeight() - 16
+                            || !isUsableGround(world.getBlockAt(x, ground, z).getType())) {
+                        valid = false;
+                        break;
+                    }
+                    minGround = Math.min(minGround, ground);
+                    maxGround = Math.max(maxGround, ground);
+                }
+            }
+            if (!valid || maxGround - minGround > 3) continue;
+
+            int baseY = maxGround + 1;
+            int sampleX = originX + footprint / 2;
+            int sampleZ = originZ + footprint / 2;
+            if (!validBase(world, id, sampleX, baseY - 1, sampleZ)) continue;
+            return new Site(originX, originZ, baseY);
+        }
+        return null;
+    }
+
+    private int surfaceY(World world, int x, int z) {
+        if (world.getEnvironment() == World.Environment.NETHER) {
+            for (int y = Math.min(100, world.getMaxHeight() - 2);
+                 y > world.getMinHeight(); y--) {
+                Material current = world.getBlockAt(x, y, z).getType();
+                Material above = world.getBlockAt(x, y + 1, z).getType();
+                if (isUsableGround(current) && above.isAir()) return y;
+            }
+            return -1;
+        }
+        int y = world.getHighestBlockYAt(x, z);
+        while (y > world.getMinHeight() && !isUsableGround(world.getBlockAt(x, y, z).getType())) y--;
+        return y;
+    }
+
+    private boolean isUsableGround(Material material) {
+        if (material.isAir() || material == Material.WATER || material == Material.LAVA
+                || material == Material.POWDER_SNOW) return false;
+        String name = material.name();
+        return !name.endsWith("_LEAVES") && !name.endsWith("_LOG")
+                && !name.endsWith("_WOOD") && material != Material.CACTUS;
+    }
+
+    private void prepareFoundation(World world, Site site, int footprint, Material foundation) {
+        for (int x = site.originX(); x < site.originX() + footprint; x++) {
+            for (int z = site.originZ(); z < site.originZ() + footprint; z++) {
+                int ground = surfaceY(world, x, z);
+                for (int y = ground + 1; y < site.baseY(); y++) {
+                    block(world, x, y, z, foundation);
+                }
+            }
+        }
+    }
+
+    private MaterialPalette palette(World world, String id, int x, int y, int z) {
+        if ("nether".equals(id) || world.getEnvironment() == World.Environment.NETHER) {
+            return new MaterialPalette(Material.BLACKSTONE, Material.SOUL_SOIL, Material.GILDED_BLACKSTONE);
+        }
+        if ("end".equals(id) || world.getEnvironment() == World.Environment.THE_END) {
+            return new MaterialPalette(Material.END_STONE, Material.PURPUR_BLOCK, Material.OBSIDIAN);
+        }
+
+        Biome biome = world.getBiome(x, y, z);
+        String name = biome.name();
+        if (name.contains("DESERT") || name.contains("BADLANDS")) {
+            return new MaterialPalette(Material.SANDSTONE, Material.SAND, Material.RED_SANDSTONE);
+        }
+        if (name.contains("SNOW") || name.contains("ICE") || name.contains("FROZEN")) {
+            return new MaterialPalette(Material.SPRUCE_PLANKS, Material.SNOW_BLOCK, Material.PACKED_ICE);
+        }
+        if (name.contains("JUNGLE") || name.contains("BAMBOO")) {
+            return new MaterialPalette(Material.JUNGLE_PLANKS, Material.MOSS_BLOCK, Material.BAMBOO_BLOCK);
+        }
+        if (name.contains("TAIGA") || name.contains("GROVE")) {
+            return new MaterialPalette(Material.SPRUCE_PLANKS, Material.PODZOL, Material.SPRUCE_LOG);
+        }
+        if (name.contains("SWAMP") || name.contains("MANGROVE")) {
+            return new MaterialPalette(Material.MANGROVE_PLANKS, Material.MUD, Material.MANGROVE_LOG);
+        }
+        return new MaterialPalette(Material.OAK_PLANKS, Material.DIRT_PATH, Material.OAK_LOG);
+    }
+
+    private void decorateSite(World world, String id, Site site, int footprint,
+                              MaterialPalette palette, int variant, Random random) {
+        int middle = site.originX() + footprint / 2;
+        int front = site.originZ() + footprint - 1;
+        for (int i = 1; i < footprint - 1; i++) {
+            if (world.getBlockAt(middle, site.baseY() + 1, site.originZ() + i).getType().isAir()
+                    && i % 2 == 0) {
+                block(world, middle, site.baseY() + 1, site.originZ() + i, palette.path());
+            }
+        }
+
+        for (int[] corner : new int[][]{
+                {site.originX() + 1, site.originZ() + 1},
+                {site.originX() + footprint - 2, site.originZ() + 1},
+                {site.originX() + 1, front - 1},
+                {site.originX() + footprint - 2, front - 1}}) {
+            if (random.nextBoolean()) {
+                pillar(world, corner[0], site.baseY() + 1, corner[1],
+                        1 + random.nextInt(3), palette.accent());
+            }
+        }
+
+        if ("overworld".equals(id)) {
+            Material plant = palette.path() == Material.SNOW_BLOCK ? Material.SNOW : Material.GRASS;
+            for (int i = 0; i < 3; i++) {
+                int x = site.originX() + 1 + random.nextInt(Math.max(1, footprint - 2));
+                int z = site.originZ() + 1 + random.nextInt(Math.max(1, footprint - 2));
+                if (world.getBlockAt(x, site.baseY() + 1, z).getType().isAir()) {
+                    block(world, x, site.baseY() + 1, z, plant);
+                }
+            }
+        }
+    }
+
+    private void populateChests(World world, String id, Site site, int footprint, Random random) {
+        List<Material> loot = switch (id) {
+            case "mineracao" -> List.of(Material.COAL, Material.RAW_IRON, Material.COPPER_INGOT,
+                    Material.REDSTONE, Material.LAPIS_LAZULI, Material.TORCH, Material.RAIL,
+                    Material.IRON_PICKAXE, Material.GOLD_INGOT);
+            case "nether" -> List.of(Material.GOLD_NUGGET, Material.QUARTZ, Material.OBSIDIAN,
+                    Material.FIRE_CHARGE, Material.GLOWSTONE_DUST, Material.NETHER_WART,
+                    Material.BASALT, Material.GOLDEN_SWORD);
+            case "end" -> List.of(Material.ENDER_PEARL, Material.CHORUS_FRUIT, Material.PURPUR_BLOCK,
+                    Material.SHULKER_SHELL, Material.OBSIDIAN, Material.END_ROD,
+                    Material.DIAMOND, Material.ENDER_EYE);
+            default -> List.of(Material.BREAD, Material.APPLE, Material.TORCH, Material.IRON_INGOT,
+                    Material.EMERALD, Material.ARROW, Material.LEATHER, Material.WHEAT_SEEDS,
+                    Material.LANTERN, Material.IRON_SWORD);
+        };
+
+        for (int x = site.originX(); x < site.originX() + footprint; x++) {
+            for (int y = site.baseY(); y < site.baseY() + 14; y++) {
+                for (int z = site.originZ(); z < site.originZ() + footprint; z++) {
+                    if (!(world.getBlockAt(x, y, z).getState() instanceof Chest chest)) continue;
+                    Inventory inventory = chest.getInventory();
+                    int entries = 2 + random.nextInt(4);
+                    for (int entry = 0; entry < entries; entry++) {
+                        Material item = loot.get(random.nextInt(loot.size()));
+                        int amount = 1 + random.nextInt(item.getMaxStackSize() >= 16 ? 8 : 3);
+                        inventory.addItem(new ItemStack(item, amount));
+                    }
+                }
+            }
+        }
+    }
+
+    private record Site(int originX, int originZ, int baseY) {}
+
+    private record MaterialPalette(Material foundation, Material path, Material accent) {}
 
     private void markWorldComplete(World world) {
         world.getPersistentDataContainer().set(
