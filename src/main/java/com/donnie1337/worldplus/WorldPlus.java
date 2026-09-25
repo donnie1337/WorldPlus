@@ -31,6 +31,7 @@ public final class WorldPlus extends JavaPlugin implements Listener {
     private RtpManager rtpManager;
     private WorldTimeManager worldTimeManager;
     private WorldResetManager worldResetManager;
+    private WorldStructureGenerator structureGenerator;
 
     @Override
     public void onLoad() {
@@ -61,10 +62,12 @@ public final class WorldPlus extends JavaPlugin implements Listener {
             worldResetManager.stop();
             worldResetManager = null;
         }
+        structureGenerator = null;
     }
 
     @Override
     public void onEnable() {
+        structureGenerator = new WorldStructureGenerator(this);
         WorldCommand command = new WorldCommand(this);
         PluginCommand mundos = getCommand("mundos");
         if (mundos != null) {
@@ -98,7 +101,6 @@ public final class WorldPlus extends JavaPlugin implements Listener {
         getServer().getPluginManager().registerEvents(rtpManager, this);
         getServer().getPluginManager().registerEvents(rtpCommand, this);
         getServer().getPluginManager().registerEvents(new WorldPortalListener(this), this);
-        getServer().getPluginManager().registerEvents(new WorldStructureGenerator(this), this);
         // Registrado no tick seguinte para ficar após listeners ativados junto
         // com o servidor e preservar exclusivamente os RTPs do WorldPlus.
         Bukkit.getScheduler().runTask(this, () ->
@@ -197,6 +199,7 @@ public final class WorldPlus extends JavaPlugin implements Listener {
         World existing = Bukkit.getWorld(settings.name());
         if (existing != null) {
             applySettings(existing, settings);
+            if (structureGenerator != null) structureGenerator.generateWorld(settings, existing);
             return existing;
         }
         File worldFolder = new File(Bukkit.getWorldContainer(), settings.name());
@@ -217,6 +220,7 @@ public final class WorldPlus extends JavaPlugin implements Listener {
             if (world.getEnvironment() == World.Environment.THE_END && newWorld) {
                 configureEnd(world, settings);
             }
+            if (structureGenerator != null) structureGenerator.generateWorld(settings, world);
             if (getConfig().getBoolean("configuracao.mensagem-console", true))
                 getLogger().info("Mundo carregado: " + settings.id() + " -> " + settings.name());
         }
