@@ -137,7 +137,8 @@ public final class TitleManager implements Listener {
                 "&f" + structureDisplayName(structure));
         String subtitle = plugin.getConfig().getString(
                 "titles.construcoes." + structure + ".subtitulo",
-                "&7Você encontrou uma construção especial");
+                plugin.getConfig().getString("titles.construcoes.subtitulo",
+                        "&7Você encontrou uma construção especial"));
         sendTitle(player, title, subtitle, "titles.construcoes");
     }
 
