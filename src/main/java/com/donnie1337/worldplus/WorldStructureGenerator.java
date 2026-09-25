@@ -323,6 +323,11 @@ public final class WorldStructureGenerator {
      * O índice fica no PDC do mundo para que o comando não precise varrer o disco
      * nem carregar chunks adicionais na thread principal.
      */
+    /**
+     * Retorna as construções já materializadas e registradas neste mundo.
+     * O índice fica no PDC do mundo para que o comando não precise varrer o disco
+     * nem carregar chunks adicionais na thread principal.
+     */
     public List<GeneratedStructure> getGeneratedStructures(World world) {
         if (world == null) return List.of();
         String raw = world.getPersistentDataContainer().get(structureIndexKey, PersistentDataType.STRING);
@@ -330,14 +335,13 @@ public final class WorldStructureGenerator {
 
         List<GeneratedStructure> result = new ArrayList<>();
         for (String entry : raw.split(";")) {
-            String[] fields = entry.split(",", 4);
+            String[] fields = entry.split("\\|", 4);
             if (fields.length != 4) continue;
             try {
                 result.add(new GeneratedStructure(fields[0],
-                        fields[1],
+                        Integer.parseInt(fields[1]),
                         Integer.parseInt(fields[2]),
-                        Integer.parseInt(fields[3].substring(0, fields[3].indexOf(':'))),
-                        Integer.parseInt(fields[3].substring(fields[3].indexOf(':') + 1))));
+                        Integer.parseInt(fields[3])));
             } catch (RuntimeException ignored) {
                 // Ignora entradas antigas/corrompidas sem interromper o comando.
             }
@@ -347,7 +351,7 @@ public final class WorldStructureGenerator {
 
     private void registerStructure(World world, String structure, int x, int y, int z) {
         String raw = world.getPersistentDataContainer().get(structureIndexKey, PersistentDataType.STRING);
-        String entry = structure + "," + x + "," + y + "," + x + ":" + z;
+        String entry = structure + "|" + x + "|" + y + "|" + z;
         if (raw == null || raw.isBlank()) {
             world.getPersistentDataContainer().set(structureIndexKey, PersistentDataType.STRING, entry);
             return;
@@ -358,7 +362,7 @@ public final class WorldStructureGenerator {
         world.getPersistentDataContainer().set(structureIndexKey, PersistentDataType.STRING, raw + ";" + entry);
     }
 
-    public record GeneratedStructure(String name, String id, int x, int y, int z) {}
+    public record GeneratedStructure(String name, int x, int y, int z) {}
 
     private void markWorldComplete(World world) {
         world.getPersistentDataContainer().set(
