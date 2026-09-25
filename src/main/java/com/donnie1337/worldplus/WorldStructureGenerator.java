@@ -267,7 +267,7 @@ public final class WorldStructureGenerator {
         }
 
         if ("overworld".equals(id)) {
-            Material plant = palette.path() == Material.SNOW_BLOCK ? Material.SNOW : Material.GRASS;
+            Material plant = palette.path() == Material.SNOW_BLOCK ? Material.SNOW : Material.SHORT_GRASS;
             for (int i = 0; i < 3; i++) {
                 int x = site.originX() + 1 + random.nextInt(Math.max(1, footprint - 2));
                 int z = site.originZ() + 1 + random.nextInt(Math.max(1, footprint - 2));
