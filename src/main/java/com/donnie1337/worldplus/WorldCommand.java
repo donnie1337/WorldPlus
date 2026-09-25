@@ -13,6 +13,7 @@ import org.bukkit.entity.Player;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.List;
 
 public final class WorldCommand implements CommandExecutor, TabCompleter {
@@ -35,6 +36,61 @@ public final class WorldCommand implements CommandExecutor, TabCompleter {
 
         String sub = args[0].toLowerCase();
         switch (sub) {
+            case "construcoes", "estruturas" -> {
+                if (!sender.hasPermission("worldplus.use")) return noPermission(sender);
+
+                String id;
+                if (args.length >= 2) {
+                    id = args[1].toLowerCase();
+                } else if (sender instanceof Player player) {
+                    id = findCurrentWorldId(player);
+                    if (id == null) {
+                        sender.sendMessage(color("&eVocê não está em um mundo configurado. Use &f/mundos construcoes <mundo>&e."));
+                        return true;
+                    }
+                } else {
+                    sender.sendMessage(color("&eInforme o mundo: &f/mundos construcoes <mundo>&e."));
+                    return true;
+                }
+
+                WorldSettings settings = plugin.getSettings(id);
+                if (settings == null) return notFound(sender, id);
+                World world = Bukkit.getWorld(settings.name());
+                if (world == null) {
+                    sender.sendMessage(color("&eO mundo &f" + settings.id()
+                            + " &eainda não está carregado."));
+                    return true;
+                }
+
+                List<WorldStructureGenerator.GeneratedStructure> structures =
+                        plugin.getStructureGenerator() == null
+                                ? List.of()
+                                : plugin.getStructureGenerator().getGeneratedStructures(world);
+                if (structures.isEmpty()) {
+                    sender.sendMessage(color("&eNenhuma construção foi registrada ainda em &f"
+                            + settings.id() + "&e. A geração pode ainda estar em andamento."));
+                    return true;
+                }
+
+                Player player = sender instanceof Player p ? p : null;
+                structures = structures.stream()
+                        .sorted(Comparator.comparingDouble(structure ->
+                                distanceSquared(player, world, structure.x(), structure.z())))
+                        .toList();
+
+                sender.sendMessage(color("&7&lᴡᴏʀʟᴅᴘʟᴜs &8• &fConstruções em " + settings.id() + ":"));
+                for (int index = 0; index < structures.size(); index++) {
+                    WorldStructureGenerator.GeneratedStructure structure = structures.get(index);
+                    String distance = player != null && player.getWorld().equals(world)
+                            ? " &8(" + format(Math.sqrt(distanceSquared(player, world,
+                            structure.x(), structure.z()))) + " blocos)"
+                            : "";
+                    sender.sendMessage(color("&8• &e" + (index + 1) + ". &f"
+                            + structureDisplayName(structure.name()) + " &8→ &7"
+                            + structure.x() + ", " + structure.y() + ", " + structure.z() + distance));
+                }
+                return true;
+            }
             case "info" -> {
                 if (!sender.hasPermission("worldplus.use")) return noPermission(sender);
                 if (args.length < 2) return usage(sender);
@@ -220,6 +276,31 @@ public final class WorldCommand implements CommandExecutor, TabCompleter {
         }
     }
 
+    private double distanceSquared(Player player, World world, int x, int z) {
+        if (player == null || !player.getWorld().equals(world)) return Double.MAX_VALUE;
+        double dx = player.getLocation().getX() - x;
+        double dz = player.getLocation().getZ() - z;
+        return dx * dx + dz * dz;
+    }
+
+    private String structureDisplayName(String id) {
+        return switch (id) {
+            case "posto-avancado" -> "Posto Avançado";
+            case "ruina-antiga" -> "Ruína Antiga";
+            case "templo-da-floresta" -> "Templo da Floresta";
+            case "mina-abandonada" -> "Mina Abandonada";
+            case "pedreira" -> "Pedreira";
+            case "cidade-subterranea" -> "Cidade Subterrânea";
+            case "acampamento-piglin" -> "Acampamento Piglin";
+            case "santuario-das-almas" -> "Santuário das Almas";
+            case "arena-do-nether" -> "Arena do Nether";
+            case "torre-do-end" -> "Torre do End";
+            case "templo-do-vazio" -> "Templo do Vazio";
+            case "santuario-dos-shulkers" -> "Santuário dos Shulkers";
+            default -> id;
+        };
+    }
+
     private String findCurrentWorldId(Player player) {
         for (WorldSettings s : plugin.getWorlds().values())
             if (s.name().equalsIgnoreCase(player.getWorld().getName())) return s.id();
@@ -358,7 +439,7 @@ public final class WorldCommand implements CommandExecutor, TabCompleter {
     }
 
     private boolean usage(CommandSender sender) {
-        sender.sendMessage(color(msg("uso", "&cUso: /mundos <lista|info|tp|borda|spawn|setspawn|criar|excluir|reset|recarregar>")));
+        sender.sendMessage(color(msg("uso", "&cUso: /mundos <lista|info|construcoes|tp|borda|spawn|setspawn|criar|excluir|reset|recarregar>")));
         return true;
     }
 
@@ -373,8 +454,8 @@ public final class WorldCommand implements CommandExecutor, TabCompleter {
     @Override
     public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] args) {
         if (!sender.hasPermission("worldplus.use")) return Collections.emptyList();
-        if (args.length == 1) return partial(List.of("lista", "info", "tp", "borda", "spawn", "setspawn", "criar", "excluir", "reset", "recarregar"), args[0]);
-        if (args.length == 2 && List.of("info", "tp", "borda", "spawn", "setspawn", "criar", "excluir", "reset").contains(args[0].toLowerCase())) {
+        if (args.length == 1) return partial(List.of("lista", "info", "construcoes", "tp", "borda", "spawn", "setspawn", "criar", "excluir", "reset", "recarregar"), args[0]);
+        if (args.length == 2 && List.of("info", "construcoes", "tp", "borda", "spawn", "setspawn", "criar", "excluir", "reset").contains(args[0].toLowerCase())) {
             if (args[0].equalsIgnoreCase("borda")) {
                 List<String> values = new ArrayList<>(plugin.getWorlds().keySet());
                 values.addAll(List.of("norte", "sul", "leste", "oeste"));
