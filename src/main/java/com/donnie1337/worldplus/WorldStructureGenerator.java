@@ -109,7 +109,12 @@ public final class WorldStructureGenerator {
 
         String structure = structureName(settings.id(), planned.variant());
         String existing = chunk.getPersistentDataContainer().get(structureKey, PersistentDataType.STRING);
-        if (existing != null && !existing.isBlank()) return;
+        if (existing != null && !existing.isBlank()) {
+            int centerX = planned.chunkX() * 16 + 8;
+            int centerZ = planned.chunkZ() * 16 + 8;
+            registerStructure(world, existing, centerX, baseY(world, centerX, centerZ), centerZ);
+            return;
+        }
 
         Random random = new Random(world.getSeed()
                 ^ ((long) planned.chunkX() * 341873128712L)
