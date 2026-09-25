@@ -28,11 +28,13 @@ public final class WorldStructureGenerator {
     private final WorldPlus plugin;
     private final NamespacedKey structureKey;
     private final NamespacedKey worldGenerationKey;
+    private final NamespacedKey structureIndexKey;
 
     public WorldStructureGenerator(WorldPlus plugin) {
         this.plugin = plugin;
         this.structureKey = new NamespacedKey(plugin, "generated-structure");
         this.worldGenerationKey = new NamespacedKey(plugin, "structures-generation");
+        this.structureIndexKey = new NamespacedKey(plugin, "structures-index");
     }
 
     public void generateWorld(WorldSettings settings, World world) {
@@ -132,6 +134,8 @@ public final class WorldStructureGenerator {
         populateChests(world, settings.id(), site, footprint, random);
 
         chunk.getPersistentDataContainer().set(structureKey, PersistentDataType.STRING, structure);
+        registerStructure(world, structure, site.originX() + footprint / 2, site.baseY(),
+                site.originZ() + footprint / 2);
         if (plugin.getTitleManager() != null) {
             plugin.getTitleManager().announceStructure(chunk, structure);
         }
@@ -313,6 +317,48 @@ public final class WorldStructureGenerator {
     private record Site(int originX, int originZ, int baseY) {}
 
     private record MaterialPalette(Material foundation, Material path, Material accent) {}
+
+    /**
+     * Retorna as construções já materializadas e registradas neste mundo.
+     * O índice fica no PDC do mundo para que o comando não precise varrer o disco
+     * nem carregar chunks adicionais na thread principal.
+     */
+    public List<GeneratedStructure> getGeneratedStructures(World world) {
+        if (world == null) return List.of();
+        String raw = world.getPersistentDataContainer().get(structureIndexKey, PersistentDataType.STRING);
+        if (raw == null || raw.isBlank()) return List.of();
+
+        List<GeneratedStructure> result = new ArrayList<>();
+        for (String entry : raw.split(";")) {
+            String[] fields = entry.split(",", 4);
+            if (fields.length != 4) continue;
+            try {
+                result.add(new GeneratedStructure(fields[0],
+                        fields[1],
+                        Integer.parseInt(fields[2]),
+                        Integer.parseInt(fields[3].substring(0, fields[3].indexOf(':'))),
+                        Integer.parseInt(fields[3].substring(fields[3].indexOf(':') + 1))));
+            } catch (RuntimeException ignored) {
+                // Ignora entradas antigas/corrompidas sem interromper o comando.
+            }
+        }
+        return result;
+    }
+
+    private void registerStructure(World world, String structure, int x, int y, int z) {
+        String raw = world.getPersistentDataContainer().get(structureIndexKey, PersistentDataType.STRING);
+        String entry = structure + "," + x + "," + y + "," + x + ":" + z;
+        if (raw == null || raw.isBlank()) {
+            world.getPersistentDataContainer().set(structureIndexKey, PersistentDataType.STRING, entry);
+            return;
+        }
+        for (String existing : raw.split(";")) {
+            if (existing.equals(entry)) return;
+        }
+        world.getPersistentDataContainer().set(structureIndexKey, PersistentDataType.STRING, raw + ";" + entry);
+    }
+
+    public record GeneratedStructure(String name, String id, int x, int y, int z) {}
 
     private void markWorldComplete(World world) {
         world.getPersistentDataContainer().set(
