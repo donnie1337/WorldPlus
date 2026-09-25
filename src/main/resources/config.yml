@@ -60,26 +60,6 @@ mundos:
     manter-inventario: true
     dificuldade: "HARD"
 
-# ------------------------------------------------------------
-# Construções personalizadas por mundo
-# São planejadas e geradas uma única vez durante a criação/carregamento
-# do mundo. O RTP não cria construções novas. Cada mundo recebe 30 construções.
-construcoes:
-  habilitado: true
-  mundos:
-    overworld:
-      habilitado: true
-      quantidade: 30
-    mineracao:
-      habilitado: true
-      quantidade: 30
-    nether:
-      habilitado: true
-      quantidade: 30
-    end:
-      habilitado: true
-      quantidade: 30
-
 # Apenas estes mundos são apagados e recriados automaticamente. O Overworld
 # não entra nesta lista e é bloqueado pelo código mesmo se for adicionado aqui.
 reset-mundos:
@@ -422,37 +402,6 @@ titles:
     the_void:
       mensagem: "&fᴏ ᴠᴀᴢɪᴏ"
 
-
-  construcoes:
-    habilitado: true
-    fade-in: 15
-    duracao: 45
-    fade-out: 20
-    subtitulo: "&7Você encontrou uma construção especial"
-    posto-avancado:
-      titulo: "&fᴘᴏsᴛᴏ ᴀᴠᴀɴᴄᴀᴅᴏ"
-    ruina-antiga:
-      titulo: "&fʀᴜíɴᴀ ᴀɴᴛɪɢᴀ"
-    templo-da-floresta:
-      titulo: "&fᴛᴇᴍᴘʟᴏ ᴅᴀ ғʟᴏʀᴇsᴛᴀ"
-    mina-abandonada:
-      titulo: "&fᴍɪɴᴀ ᴀʙᴀɴᴅᴏɴᴀᴅᴀ"
-    pedreira:
-      titulo: "&fᴘᴇᴅʀᴇɪʀᴀ"
-    cidade-subterranea:
-      titulo: "&fᴄɪᴅᴀᴅᴇ sᴜʙᴛᴇʀʀâɴᴇᴀ"
-    acampamento-piglin:
-      titulo: "&fᴀᴄᴀᴍᴘᴀᴍᴇɴᴛᴏ ᴘɪɢʟɪɴ"
-    santuario-das-almas:
-      titulo: "&fsᴀɴᴛᴜáʀɪᴏ ᴅᴀs ᴀʟᴍᴀs"
-    arena-do-nether:
-      titulo: "&fᴀʀᴇɴᴀ ᴅᴏ ɴᴇᴛʜᴇʀ"
-    torre-do-end:
-      titulo: "&fᴛᴏʀʀᴇ ᴅᴏ ᴇɴᴅ"
-    templo-do-vazio:
-      titulo: "&fᴛᴇᴍᴘʟᴏ ᴅᴏ ᴠᴀᴢɪᴏ"
-    santuario-dos-shulkers:
-      titulo: "&fsᴀɴᴛᴜáʀɪᴏ ᴅᴏs sʜᴜʟᴋᴇʀs"
 
 mensagens:
   prefixo: "&7&lᴡᴏʀʟᴅᴘʟᴜs &8• &r"
