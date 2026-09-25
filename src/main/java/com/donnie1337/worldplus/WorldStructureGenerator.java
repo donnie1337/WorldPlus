@@ -89,7 +89,7 @@ public final class WorldStructureGenerator implements Listener {
     private boolean validBase(World world, String id, int x, int y, int z) {
         if (y <= world.getMinHeight() + 2 || y >= world.getMaxHeight() - 16) return false;
         Material floor = world.getBlockAt(x, y, z).getType();
-        if (floor.isAir() || floor.isLiquid()) return false;
+        if (floor.isAir() || floor == Material.WATER || floor == Material.LAVA) return false;
         if ("overworld".equals(id) && y < 45) return false;
         if ("end".equals(id) && y < 30) return false;
         return true;
