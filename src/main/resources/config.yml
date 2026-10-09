@@ -262,7 +262,7 @@ titles:
     fade-out: 10
 
   bioma:
-    habilitado: true
+    habilitado: false
     fade-in: 15
     duracao: 45
     fade-out: 20
