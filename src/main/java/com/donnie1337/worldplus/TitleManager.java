@@ -17,6 +17,9 @@ import java.util.Map;
 import java.util.UUID;
 
 public final class TitleManager implements Listener {
+    // Temporariamente desativado: não exibir titles ao trocar de bioma.
+    private static final boolean BIOME_TITLES_ENABLED = false;
+
     private final WorldPlus plugin;
     private final Map<UUID, String> lastBiomes = new HashMap<>();
     private final Map<UUID, Boolean> firstRtpTitleShown = new HashMap<>();
@@ -64,6 +67,7 @@ public final class TitleManager implements Listener {
     }
 
     public void showBiome(Player player, Location location) {
+        if (!BIOME_TITLES_ENABLED) return;
         if (rtpTitleActive.getOrDefault(player.getUniqueId(), false)) return;
         if (!plugin.getConfig().getBoolean("titles.bioma.habilitado", true) || location == null) return;
 
@@ -87,7 +91,7 @@ public final class TitleManager implements Listener {
 
     public void showBiomeAfterRtp(Player player, Location location) {
         endRtpTitle(player);
-        if (location == null) return;
+        if (!BIOME_TITLES_ENABLED || location == null) return;
         Biome biome = location.getWorld().getBiome(location);
         lastBiomes.put(player.getUniqueId(), biome.getKey().toString());
         sendBiomeTitle(player, biome);
